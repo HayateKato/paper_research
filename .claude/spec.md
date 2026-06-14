@@ -2,14 +2,15 @@
 
 ## 概要
 
-ローカルにダウンロードした論文 PDF を `papers/` フォルダに配置し、スクリプトを実行するだけで、Claude が PDF 全文を解析して Notion DB エントリとページ本文を自動作成する。ユーザーは Notion への手動入力不要。
+NotebookLM で論文を解析した JSON 出力を `output.json` に貼り付けて `python main.py` を実行するだけで、Notion DB エントリとページ本文を自動作成する。Claude API は使用しない。
 
 ---
 
 ## ユーザーの作業手順
 
-1. 論文 PDF をダウンロードし `papers/` フォルダに配置
-2. `python main.py` を実行
+1. NotebookLM に `prompts/user.md`（プロンプト）と論文 PDF を投げる
+2. 返ってきた JSON を `output.json` に貼り付けて保存
+3. `python main.py` を実行
 
 以上。
 
@@ -18,155 +19,106 @@
 ## 実行フロー
 
 ```
-手動実行
+python main.py
   ↓
-papers/ フォルダ内の PDF をスキャン（未処理のみ）
-  ↓
-Claude に PDF を直接送信 → JSON 形式で全データを一括取得（1回のみ）
+output.json を読み込んで JSON をパース・バリデーション
   ↓
 Notion DB に新規エントリを作成（プロパティ設定）
   ↓
 Notion ページ本文に論文整理を書き込み
   ↓
-PDF を papers/registered/ に移動
+output.json を results/{タイムスタンプ}.json に移動（二重登録防止・バックアップ）
 ```
 
 ---
 
 ## Notion DB スキーマ
 
-全カラムをスクリプトが自動入力する。ユーザーの手動入力不要。
-
-| カラム名 | 型 | 取得元 | 説明 |
+| カラム名 | 型 | 取得元 | JSON キー |
 |---|---|---|---|
-| Title | title | Claude | 論文タイトル（原題） |
-| Filename | rich_text | ファイル名 | papers/ 内の PDF ファイル名（処理済み判定に使用） |
+| Title | title | JSON | `title` |
 | Status | select | スクリプト | Done / Error |
-| Models | multi_select | Claude | 使用モデル・アーキテクチャ（フィルタリング用） |
-| Tasks | multi_select | Claude | タスク種別（フィルタリング用） |
-| Data | multi_select | Claude | データドメイン（フィルタリング用） |
-| Year | number | Claude | 発表年 |
-| Venue | rich_text | Claude | ジャーナル・会議名（不明な場合は空） |
+| Tasks | multi_select | JSON | `tasks` |
+| Method | multi_select | JSON | `method` |
+| Data | multi_select | JSON | `data_domains` |
+| Year | number | JSON | `year` |
+| Venue | rich_text | JSON | `venue` |
 
 ---
 
 ## Notion ページ本文
 
-`prompt.md` のフォーマットに従い、以下の構成で書き込む。
+DB エントリのページ本文に、以下の Notion ブロック構成で1ページにまとめて書き込む。
 
-```
-### 本研究の目的
-
-- 課題：どんな問題があるのか
-- 目標：何を解決・実現したいのか
-
-### 本研究の提案手法
-
-- 使用モデル：ベースとなるモデルやアーキテクチャ
-- 入力データ
-    - グラフ構造：ノード・エッジの定義
-    - ノード特徴量：テキスト・メタ情報など
-    - その他：あれば
-- 出力：何を出力するのか・形式
-
-### 実験
-
-- データセット
-    - 名称：データセット名
-    - ドメイン：論文ネットワーク・SNS・知識グラフなど
-    - 規模：ノード数・エッジ数
-- 予測タスク：何を予測しているのか
-- 立証されたこと：何が示されたのか
-
-### 私の研究での応用可能性
-
-- 前提条件：JPATの審査官引用による引用関係と各特許のテキスト情報（要約・特許請求の範囲・発明の詳細な説明）を使用する
-- 応用できる点：あれば
-- 課題・制約：あれば
-```
-
-「前提条件」はプロンプトに含めて Claude に渡し、それをもとに「応用できる点」「課題・制約」を生成させる。ページ本文には前提条件の文章も固定テキストとして表示する。
+| ブロック種別 | 内容 |
+|---|---|
+| heading_2 | 本研究の目的 |
+| bulleted_list_item | 課題：{page.purpose.issue} |
+| bulleted_list_item | 目標：{page.purpose.goal} |
+| heading_2 | 本研究の提案手法 |
+| paragraph | 処理フロー：{page.method.framework} |
+| paragraph | 使用モデル： |
+| bulleted_list_item × N | {page.method.models[n].model}（{page.method.models[n].purpose}）← N 件展開 |
+| paragraph | 入力データ： |
+| bulleted_list_item | グラフ構造：ノード：{page.method.input.graph.node} / エッジ：{page.method.input.graph.edge} |
+| bulleted_list_item | その他：{page.method.input.others}（null の場合はこの行を省略） |
+| paragraph | 出力：{page.method.output} |
+| heading_2 | 実験 |
+| paragraph | データセット： |
+| bulleted_list_item × N | 名称：{name} / ドメイン：{domain} / 規模：{scale} ← N 件展開 |
+| bulleted_list_item | 予測タスク：{page.experiment.task} |
+| bulleted_list_item | 立証されたこと：{page.experiment.findings} |
+| heading_2 | 私の研究での応用可能性 |
+| bulleted_list_item | 前提条件：J-PLAT-PATの審査官引用による引用関係と各特許のテキスト情報（要約・特許請求の範囲・発明の詳細な説明）を使用する |
+| bulleted_list_item | 応用できる点：{page.applicability.applicable}（null の場合は「なし」） |
+| bulleted_list_item | 課題・制約：{page.applicability.limitations}（null の場合は「なし」） |
 
 ---
 
-## 処理済み判定
+## 入力 JSON フォーマット（`output.json`）
 
-- `papers/` にある PDF のみ処理対象とする
-- 処理完了後に `papers/registered/` へ移動するため、次回実行時は自動的にスキップされる
-- Notion DB の Filename カラムも補助的にチェックし、移動失敗等による二重登録を防ぐ
+`prompt/notebooklm.md` の出力形式に準拠。
 
----
-
-## Claude プロンプト仕様
-
-Claude の呼び出しは論文1本につき1回。PDF ファイルをそのまま API に渡し、DB プロパティ用データとページ本文用データを1つの JSON で取得する。
-
-```python
-with open("papers/foo.pdf", "rb") as f:
-    pdf_data = base64.b64encode(f.read()).decode("utf-8")
-
-client.messages.create(
-    messages=[{
-        "role": "user",
-        "content": [
-            {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": pdf_data}},
-            {"type": "text", "text": prompt}
-        ]
-    }]
-)
-```
-
-### システムプロンプト（`prompts/system.md`）
-
-```
-あなたは機械学習・グラフ学習分野の論文を解析するアシスタントです。
-添付された論文 PDF から以下の情報を JSON 形式で抽出してください。
-```
-
-### ユーザープロンプト（`prompts/analyze.md`）
-
-```
-添付の論文を解析し、JSON 形式で回答してください。
-
-## 私の研究の前提条件
-JPATの審査官引用による引用関係と各特許のテキスト情報（要約・特許請求の範囲・発明の詳細な説明）を使用する。
-
-## 出力形式
+```json
 {
-  "title": "論文のタイトル（原文のまま）",
-  "models": ["使用されているモデル・アーキテクチャ名（例: GCN, LSTM）"],
-  "tasks": ["解いているタスク（例: リンク予測, ノード分類）"],
-  "data_domains": ["使用データのドメイン（例: SNS, 論文ネットワーク）"],
-  "year": 発表年（数値、不明な場合は null）,
-  "venue": "掲載ジャーナルまたは会議名（不明な場合は null）",
+  "title": "論文タイトル（原文）",
+  "tasks": ["タスク（例: Inductive リンク予測, ノード分類）"],
+  "method": ["アプローチの大分類（例: クラスタリング, RAG）"],
+  "data_domains": ["データ種別（例: 特許, SNS）"],
+  "year": 2024,
+  "venue": "会議・ジャーナル名（不明な場合は null）",
   "page": {
     "purpose": {
-      "issue": "どんな問題があるのか",
-      "goal": "何を解決・実現したいのか"
+      "issue": "問題の説明",
+      "goal": "解決・実現したいこと"
     },
     "method": {
-      "models": "ベースとなるモデルやアーキテクチャの詳細説明",
+      "framework": "処理フロー（入力から出力までのステップ説明）",
+      "models": [
+        {"model": "モデル名と構造の説明", "purpose": "役割・目的"}
+      ],
       "input": {
-        "graph": "ノード・エッジの定義",
-        "node_features": "テキスト・メタ情報など",
-        "others": "あれば、なければ null"
+        "graph": {
+          "node": "ノードが表すもの・埋め込みの内容",
+          "edge": "エッジが表すもの（なければ null）"
+        },
+        "others": "その他の入力（なければ null）"
       },
-      "output": "何を出力するのか・形式"
+      "output": "出力内容・形式"
     },
     "experiment": {
-      "datasets": [{"name": "データセット名", "domain": "ドメイン", "scale": "ノード数・エッジ数"}],
-      "task": "何を予測しているのか",
-      "findings": "何が示されたのか"
+      "datasets": [
+        {"name": "データセット名", "domain": "データ種別", "scale": "ノード数・エッジ数"}
+      ],
+      "task": "予測タスク",
+      "findings": "立証されたこと"
     },
     "applicability": {
-      "applicable": "上記の前提条件をもとに応用できる点（なければ null）",
-      "limitations": "上記の前提条件をもとに考えられる課題・制約（なければ null）"
+      "applicable": "応用できる点（なければ null）",
+      "limitations": "課題・制約（なければ null）"
     }
   }
 }
-
-各配列は該当しない場合は空配列 [] としてください。
-JSON のみを返してください。
 ```
 
 ---
@@ -176,16 +128,13 @@ JSON のみを返してください。
 ```
 paper_research/
 ├── .env                    # API キー（git 管理外）
-├── .env.example            # 環境変数のサンプル
+├── .env.example
+├── output.json             # NotebookLM の出力を貼り付けるファイル（git 管理外）
+├── results/                # 処理済み JSON のバックアップ（git 管理外）
 ├── main.py                 # エントリーポイント
-├── papers/                 # ダウンロードした PDF を配置するフォルダ（未処理）
-│   └── registered/         # 処理済み PDF の移動先
+├── notion_helper.py        # Notion API ラッパー
 ├── prompts/
-│   ├── system.md           # Claude システムプロンプト
-│   └── analyze.md          # Claude ユーザープロンプトテンプレート
-├── src/
-│   ├── notion_helper.py    # Notion API ラッパー
-│   └── claude_helper.py    # Claude API ラッパー（PDF を直接送信）
+│   └── notebooklm.md       # NotebookLM に投げるプロンプト
 └── requirements.txt
 ```
 
@@ -196,7 +145,6 @@ paper_research/
 ```
 NOTION_API_KEY=...
 NOTION_DATABASE_ID=...
-ANTHROPIC_API_KEY=...
 ```
 
 ---
@@ -204,7 +152,6 @@ ANTHROPIC_API_KEY=...
 ## 依存ライブラリ（`requirements.txt`）
 
 ```
-anthropic
 notion-client
 python-dotenv
 ```
@@ -215,29 +162,33 @@ python-dotenv
 
 | エラーケース | 対応 |
 |---|---|
-| Claude API エラー | 1 回リトライ後も失敗なら Status=Error で Notion に登録 |
-| Claude の JSON パース失敗 | Status=Error で Notion に登録 |
-| Notion 書き込みエラー | ログ出力のみ（PDF は移動しない）|
-| papers/registered/ への移動失敗 | ログ出力のみ（次回実行時に Notion チェックでスキップ）|
+| `output.json` が存在しない | エラーメッセージを出力して終了 |
+| JSON パース失敗 | エラーメッセージを出力して終了（results/ に移動しない） |
+| 必須キー欠落 | エラーメッセージを出力して終了（results/ に移動しない） |
+| Notion DB 書き込みエラー | エラーメッセージを出力して終了（results/ に移動しない） |
+| Notion ページ書き込みエラー | ログ出力のみ（DB エントリは作成済みのため results/ に移動する） |
 
 ---
+
+## 実行環境
+
+- Python 3.14（システムの `python3` を使用）
+- venv で仮想環境を管理する
 
 ## 実行方法
 
 ```bash
-# 環境構築
-pip install -r requirements.txt
-cp .env.example .env
-# .env に各 API キーを記入
+# 仮想環境の作成と有効化
+python3 -m venv .venv
+source .venv/bin/activate
 
-# PDF を papers/ フォルダに配置後に実行
+# 依存ライブラリのインストール
+pip install -r requirements.txt
+
+# 環境変数の設定
+cp .env.example .env
+# .env に Notion API キーを記入
+
+# output.json に NotebookLM の出力を貼り付けた後に実行
 python main.py
 ```
-
----
-
-## 将来的な拡張候補（スコープ外）
-
-- スキャン PDF への OCR 対応
-- キーワードの自由タグ追加
-- papers/ フォルダ監視による自動トリガー
