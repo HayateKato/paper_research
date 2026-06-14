@@ -53,7 +53,7 @@ def archive_output() -> None:
     """output.json を results/{タイムスタンプ}.json にコピーする。"""
     RESULTS_DIR.mkdir(exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dest = RESULTS_DIR / f"{timestamp}.json"
+    dest = RESULTS_DIR / f"{timestamp}.txt"
     shutil.copy2(str(OUTPUT_FILE), str(dest))
     print(f"output.json を {dest} にコピーしました。")
 
