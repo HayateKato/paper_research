@@ -4,4 +4,4 @@ __pycache__/
 .python-version
 .env
 results/
-output.json
+output.txt
