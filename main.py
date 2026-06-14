@@ -12,7 +12,7 @@ from notion_client import Client
 
 from notion_helper import create_db_entry, create_page_body
 
-OUTPUT_FILE = Path("output.json")
+OUTPUT_FILE = Path("output.txt")
 RESULTS_DIR = Path("results")
 
 REQUIRED_KEYS = {"title", "tasks", "method", "data_domains", "year", "venue", "page"}
@@ -32,7 +32,11 @@ def load_output() -> dict:
         sys.exit(1)
 
     try:
-        data = json.loads(OUTPUT_FILE.read_text(encoding="utf-8"))
+        text = OUTPUT_FILE.read_text(encoding="utf-8").strip()
+        if text.startswith("```"):
+            text = "\n".join(text.splitlines()[1:])
+            text = text[:text.rfind("```")]
+        data = json.loads(text)
     except json.JSONDecodeError as e:
         print(f"エラー: JSON パースに失敗しました。{e}")
         sys.exit(1)
