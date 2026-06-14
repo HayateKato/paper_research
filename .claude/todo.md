@@ -10,10 +10,7 @@
 
 ## タスク
 
-<!-- 例:
-- [~] notion_helper.py の関数定義・docstring を記述
-  - [x] create_db_entry()
-  - [ ] create_page_body()
-- [ ] tests/test_notion_helper.py を作成
-- [ ] テストが通るように実装
--->
+- [x] フェーズ2: 関数定義・docstring 記述（main.py, notion_helper.py, requirements.txt）
+- [x] フェーズ3: tests/ にテストコードを作成
+- [x] フェーズ4: テストが通るように実装
+- [ ] 動作確認（.env に API キーを設定して python main.py を実行）
