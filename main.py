@@ -1,4 +1,4 @@
-"""エントリーポイント。output.json の読み込みから Notion 書き込みまでを統括する。"""
+"""エントリーポイント。output.txt の読み込みから Notion 書き込みまでを統括する。"""
 
 import json
 import os
@@ -19,7 +19,7 @@ REQUIRED_KEYS = {"title", "tasks", "method", "data_domains", "year", "venue", "p
 
 
 def load_output() -> dict:
-    """output.json を読み込んでパース・バリデーションする。
+    """output.txt を読み込んでパース・バリデーションする。
 
     Returns:
         パース済みの辞書
@@ -28,7 +28,7 @@ def load_output() -> dict:
         SystemExit: ファイルなし・パース失敗・必須キー欠落時
     """
     if not OUTPUT_FILE.exists():
-        print("エラー: output.json が見つかりません。")
+        print("エラー: output.txt が見つかりません。")
         sys.exit(1)
 
     try:
@@ -50,12 +50,12 @@ def load_output() -> dict:
 
 
 def archive_output() -> None:
-    """output.json を results/{タイムスタンプ}.json にコピーする。"""
+    """output.txt を results/{タイムスタンプ}.json にコピーする。"""
     RESULTS_DIR.mkdir(exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     dest = RESULTS_DIR / f"{timestamp}.txt"
     shutil.copy2(str(OUTPUT_FILE), str(dest))
-    print(f"output.json を {dest} にコピーしました。")
+    print(f"output.txt を {dest} にコピーしました。")
 
 
 def main() -> None:
