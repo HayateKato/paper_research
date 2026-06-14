@@ -44,29 +44,36 @@ class TestLoadOutput:
 
     def test_invalid_json(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        (tmp_path / "output.json").write_text("not json")
+        (tmp_path / "output.txt").write_text("not json")
         with pytest.raises(SystemExit):
             main.load_output()
 
     def test_missing_required_key(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         data = {k: v for k, v in VALID_DATA.items() if k != "title"}
-        (tmp_path / "output.json").write_text(json.dumps(data))
+        (tmp_path / "output.txt").write_text(json.dumps(data))
         with pytest.raises(SystemExit):
             main.load_output()
 
     def test_valid(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        (tmp_path / "output.json").write_text(json.dumps(VALID_DATA))
+        (tmp_path / "output.txt").write_text(json.dumps(VALID_DATA))
+        result = main.load_output()
+        assert result["title"] == "Test Paper"
+
+    def test_valid_with_markdown_fence(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        content = f"```json\n{json.dumps(VALID_DATA)}\n```"
+        (tmp_path / "output.txt").write_text(content)
         result = main.load_output()
         assert result["title"] == "Test Paper"
 
 
 class TestArchiveOutput:
-    def test_moves_file(self, tmp_path, monkeypatch):
+    def test_copies_file(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        (tmp_path / "output.json").write_text(json.dumps(VALID_DATA))
+        (tmp_path / "output.txt").write_text(json.dumps(VALID_DATA))
         main.archive_output()
-        assert not (tmp_path / "output.json").exists()
-        archived = list((tmp_path / "results").glob("*.json"))
+        assert (tmp_path / "output.txt").exists()
+        archived = list((tmp_path / "results").glob("*.txt"))
         assert len(archived) == 1
