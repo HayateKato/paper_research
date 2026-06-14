@@ -46,12 +46,12 @@ def load_output() -> dict:
 
 
 def archive_output() -> None:
-    """output.json を results/{タイムスタンプ}.json に移動する。"""
+    """output.json を results/{タイムスタンプ}.json にコピーする。"""
     RESULTS_DIR.mkdir(exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     dest = RESULTS_DIR / f"{timestamp}.json"
-    shutil.move(str(OUTPUT_FILE), str(dest))
-    print(f"output.json を {dest} に移動しました。")
+    shutil.copy2(str(OUTPUT_FILE), str(dest))
+    print(f"output.json を {dest} にコピーしました。")
 
 
 def main() -> None:
