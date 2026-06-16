@@ -3,6 +3,20 @@
 from notion_client import Client
 
 
+def update_page_status(client: Client, page_id: str, status: str) -> None:
+    """Notion ページの Status プロパティを更新する。
+
+    Args:
+        client: Notion クライアント
+        page_id: 更新対象ページの ID
+        status: 設定するステータス名（例: "完了", "エラー"）
+    """
+    client.pages.update(
+        page_id=page_id,
+        properties={"Status": {"status": {"name": status}}},
+    )
+
+
 def create_db_entry(client: Client, database_id: str, data: dict) -> str:
     """Notion DB に新規エントリを作成してページ ID を返す。
 
@@ -50,7 +64,7 @@ def _build_db_properties(data: dict) -> dict:
     """
     return {
         "Title": {"title": [{"text": {"content": data["title"]}}]},
-        "Status": {"select": {"name": "Done"}},
+        "Status": {"status": {"name": "完了"}},
         "Tasks": {"multi_select": [{"name": t} for t in data["tasks"]]},
         "Method": {"multi_select": [{"name": m} for m in data["method"]]},
         "Data": {"multi_select": [{"name": d} for d in data["data_domains"]]},
@@ -139,11 +153,11 @@ def _build_page_blocks(page: dict) -> list:
 
     inp = method["input"]
     blocks.append(h3("入力"))
-    blocks.append(p(f"ノード：{inp['node']}"))
+    blocks.append(bullet(f"ノード：{inp['node']}"))
     if inp.get("edge"):
-        blocks.append(p(f"エッジ：{inp['edge']}"))
+        blocks.append(bullet(f"エッジ：{inp['edge']}"))
     if inp.get("others"):
-        blocks.append(p(f"その他：{inp['others']}"))
+        blocks.append(bullet(f"その他：{inp['others']}"))
 
     blocks.append(h3("出力"))
     blocks.append(p(method["output"]))

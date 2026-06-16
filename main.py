@@ -10,7 +10,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from notion_client import Client
 
-from notion_helper import create_db_entry, create_page_body
+from notion_helper import create_db_entry, create_page_body, update_page_status
 
 OUTPUT_FILE = Path("output.txt")
 RESULTS_DIR = Path("results")
@@ -83,6 +83,10 @@ def main() -> None:
         print("ページ本文を書き込みました。")
     except Exception as e:
         print(f"警告: ページ本文の書き込みに失敗しました。{e}")
+        try:
+            update_page_status(client, page_id, "エラー")
+        except Exception:
+            pass
 
     archive_output()
 

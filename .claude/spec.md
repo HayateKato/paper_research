@@ -37,7 +37,7 @@ output.json を results/{タイムスタンプ}.json に移動（二重登録防
 | カラム名 | 型 | 取得元 | JSON キー |
 |---|---|---|---|
 | Title | title | JSON | `title` |
-| Status | select | スクリプト | Done / Error |
+| Status | status | スクリプト | 完了 / エラー |
 | Tasks | multi_select | JSON | `tasks` |
 | Method | multi_select | JSON | `method` |
 | Data | multi_select | JSON | `data_domains` |
