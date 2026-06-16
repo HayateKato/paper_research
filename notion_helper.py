@@ -133,6 +133,7 @@ def _build_page_blocks(page: dict) -> list:
     method = page["method"]
     experiment = page["experiment"]
     applicability = page["applicability"]
+    related_works = page.get("related_works", [])
 
     blocks = [
         h2("概要"),
@@ -173,5 +174,11 @@ def _build_page_blocks(page: dict) -> list:
     blocks.append(p(applicability["applicable"] or "なし"))
     blocks.append(h3("課題・制約"))
     blocks.append(p(applicability["limitations"] or "なし"))
+
+    if related_works:
+        blocks.append(h2("関連研究"))
+        for rw in related_works:
+            blocks.append(h3(rw["title"]))
+            blocks.append(p(rw["relation"]))
 
     return blocks

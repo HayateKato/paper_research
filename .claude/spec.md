@@ -82,6 +82,9 @@ DB エントリのページ本文に、以下の Notion ブロック構成で1�
 | paragraph | {page.applicability.applicable}（null の場合は「なし」） |
 | heading_3 | 課題・制約 |
 | paragraph | {page.applicability.limitations}（null の場合は「なし」） |
+| heading_2 | 関連研究（related_works が空でない場合のみ） |
+| heading_3 × N | {page.related_works[n].title} ← N 件展開 |
+| paragraph × N | {page.related_works[n].relation} |
 
 ---
 
@@ -125,7 +128,10 @@ DB エントリのページ本文に、以下の Notion ブロック構成で1�
     "applicability": {
       "applicable": "応用できる点（なければ null）",
       "limitations": "課題・制約（なければ null）"
-    }
+    },
+    "related_works": [
+      {"title": "関連論文タイトル（原文）", "relation": "本研究との違いや関係"}
+    ]
   }
 }
 ```
