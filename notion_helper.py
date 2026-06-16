@@ -80,45 +80,84 @@ def _build_page_blocks(page: dict) -> list:
     def bullet(text: str) -> dict:
         return {"object": "block", "type": "bulleted_list_item", "bulleted_list_item": {"rich_text": [{"text": {"content": text}}]}}
 
+    def numbered(text: str) -> dict:
+        return {"object": "block", "type": "numbered_list_item", "numbered_list_item": {"rich_text": [{"text": {"content": text}}]}}
+
+    def framework_blocks(text: str) -> list:
+        import re
+        parts = re.split(r'(?=\d+\. )', text.strip())
+        parts = [re.sub(r'^\d+\. ', '', s).strip() for s in parts if s.strip()]
+        return [numbered(s) for s in parts] if len(parts) > 1 else [p(text)]
+
+    def table(datasets: list) -> dict:
+        def cell(text: str) -> list:
+            return [{"type": "text", "text": {"content": text}}]
+
+        header = {
+            "type": "table_row",
+            "table_row": {"cells": [cell("名称"), cell("ドメイン"), cell("規模")]},
+        }
+        rows = [
+            {
+                "type": "table_row",
+                "table_row": {"cells": [cell(ds["name"]), cell(ds["domain"]), cell(ds["scale"])]},
+            }
+            for ds in datasets
+        ]
+        return {
+            "object": "block",
+            "type": "table",
+            "table": {
+                "table_width": 3,
+                "has_column_header": True,
+                "has_row_header": False,
+                "children": [header] + rows,
+            },
+        }
+
     purpose = page["purpose"]
     method = page["method"]
     experiment = page["experiment"]
     applicability = page["applicability"]
 
     blocks = [
-        h2("目的"),
-        bullet(f"課題：{purpose['issue']}"),
-        bullet(f"目標：{purpose['goal']}"),
+        h2("概要"),
+        h3("課題"),
+        p(purpose["issue"]),
+        h3("目標"),
+        p(purpose["goal"]),
         h3("新規性"),
-        bullet(f"{purpose['new']}"),
+        p(purpose["new"]),
         h2("提案手法"),
         h3("処理フロー"),
-        p(f"{method['framework']}"),
+        *framework_blocks(method["framework"]),
         h3("使用モデル"),
     ]
 
     for m in method["models"]:
         blocks.append(bullet(f"{m['model']}（{m['purpose']}）"))
 
+    inp = method["input"]
     blocks.append(h3("入力"))
-    graph = method["input"]["graph"]
-    blocks.append(bullet(f"グラフ構造：ノード：{graph['node']} / エッジ：{graph['edge']}"))
-
-    if method["input"]["others"] is not None:
-        blocks.append(bullet(f"その他：{method['input']['others']}"))
+    blocks.append(p(f"ノード：{inp['node']}"))
+    if inp.get("edge"):
+        blocks.append(p(f"エッジ：{inp['edge']}"))
+    if inp.get("others"):
+        blocks.append(p(f"その他：{inp['others']}"))
 
     blocks.append(h3("出力"))
-    blocks.append(p(f"{method['output']}"))
+    blocks.append(p(method["output"]))
     blocks.append(h2("実験"))
     blocks.append(h3("データセット"))
-
-    for ds in experiment["datasets"]:
-        blocks.append(bullet(f"名称：{ds['name']} / ドメイン：{ds['domain']} / 規模：{ds['scale']}"))
-
-    blocks.append(bullet(f"予測タスク：{experiment['task']}"))
-    blocks.append(bullet(f"立証されたこと：{experiment['findings']}"))
+    blocks.append(table(experiment["datasets"]))
+    blocks.append(h3("予測タスク"))
+    blocks.append(p(experiment["task"]))
+    blocks.append(h3("立証されたこと"))
+    blocks.append(p(experiment["findings"]))
     blocks.append(h2("特許ネットワークへの応用可能性"))
-    blocks.append(bullet(f"応用できる点：{applicability['applicable'] or 'なし'}"))
-    blocks.append(bullet(f"課題・制約：{applicability['limitations'] or 'なし'}"))
+    blocks.append(h3("応用できる点"))
+    blocks.append(p(applicability["applicable"] or "なし"))
+    blocks.append(h3("課題・制約"))
+    blocks.append(p(applicability["limitations"] or "なし"))
 
     return blocks

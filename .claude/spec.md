@@ -52,29 +52,36 @@ DB エントリのページ本文に、以下の Notion ブロック構成で1�
 
 | ブロック種別 | 内容 |
 |---|---|
-| heading_2 | 目的 |
-| bulleted_list_item | 課題：{page.purpose.issue} |
-| bulleted_list_item | 目標：{page.purpose.goal} |
+| heading_2 | 概要 |
+| heading_3 | 課題 |
+| paragraph | {page.purpose.issue} |
+| heading_3 | 目標 |
+| paragraph | {page.purpose.goal} |
 | heading_3 | 新規性 |
-| bulleted_list_item | {page.purpose.new} |
+| paragraph | {page.purpose.new} |
 | heading_2 | 提案手法 |
 | heading_3 | 処理フロー |
 | paragraph | {page.method.framework} |
 | heading_3 | 使用モデル |
 | bulleted_list_item × N | {page.method.models[n].model}（{page.method.models[n].purpose}）← N 件展開 |
-| heading_3 | 入力データ |
-| bulleted_list_item | グラフ構造：ノード：{page.method.input.graph.node} / エッジ：{page.method.input.graph.edge} |
-| bulleted_list_item | その他：{page.method.input.others}（null の場合はこの行を省略） |
+| heading_3 | 入力 |
+| paragraph | ノード：{page.method.input.node} |
+| paragraph | エッジ：{page.method.input.edge}（null の場合はこの行を省略） |
+| paragraph | その他：{page.method.input.others}（null の場合はこの行を省略） |
 | heading_3 | 出力 |
 | paragraph | {page.method.output} |
 | heading_2 | 実験 |
 | heading_3 | データセット |
-| bulleted_list_item × N | 名称：{name} / ドメイン：{domain} / 規模：{scale} ← N 件展開 |
-| bulleted_list_item | 予測タスク：{page.experiment.task} |
-| bulleted_list_item | 立証されたこと：{page.experiment.findings} |
+| table（3列：名称・ドメイン・規模） | {page.experiment.datasets} ← N 行展開 |
+| heading_3 | 予測タスク |
+| paragraph | {page.experiment.task} |
+| heading_3 | 立証されたこと |
+| paragraph | {page.experiment.findings} |
 | heading_2 | 特許ネットワークへの応用可能性 |
-| bulleted_list_item | 応用できる点：{page.applicability.applicable}（null の場合は「なし」） |
-| bulleted_list_item | 課題・制約：{page.applicability.limitations}（null の場合は「なし」） |
+| heading_3 | 応用できる点 |
+| paragraph | {page.applicability.applicable}（null の場合は「なし」） |
+| heading_3 | 課題・制約 |
+| paragraph | {page.applicability.limitations}（null の場合は「なし」） |
 
 ---
 
@@ -102,10 +109,8 @@ DB エントリのページ本文に、以下の Notion ブロック構成で1�
         {"model": "モデル名と構造の説明", "purpose": "役割・目的"}
       ],
       "input": {
-        "graph": {
-          "node": "ノードが表すもの・埋め込みの内容",
-          "edge": "エッジが表すもの（なければ null）"
-        },
+        "node": "ノードが表すもの・埋め込みの内容",
+        "edge": "エッジが表すもの・埋め込みの内容（なければ null）",
         "others": "その他の入力（なければ null）"
       },
       "output": "出力内容・形式"
