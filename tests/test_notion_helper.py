@@ -75,7 +75,7 @@ class TestBuildPageBlocks:
             for b in self.blocks
             if b["type"] == "heading_2"
         ]
-        assert "目的" in texts
+        assert "概要" in texts
         assert "提案手法" in texts
         assert "実験" in texts
         assert "特許ネットワークへの応用可能性" in texts
@@ -89,15 +89,15 @@ class TestBuildPageBlocks:
         assert "新規性" in texts
         assert "処理フロー" in texts
         assert "使用モデル" in texts
-        assert "入力データ" in texts
+        assert "入力" in texts
         assert "出力" in texts
         assert "データセット" in texts
 
-    def test_purpose_bullets(self):
-        bullets = self._block_texts("bulleted_list_item")
-        assert any("課題" in t for t in bullets)
-        assert any("目標" in t for t in bullets)
-        assert any("新規性の説明" in t for t in bullets)
+    def test_purpose_paragraphs(self):
+        paras = self._block_texts("paragraph")
+        assert any("課題" in t for t in paras)
+        assert any("目標" in t for t in paras)
+        assert any("新規性の説明" in t for t in paras)
 
     def test_models_expanded(self):
         bullets = self._block_texts("bulleted_list_item")
@@ -121,12 +121,12 @@ class TestBuildPageBlocks:
     def test_applicability_none_becomes_nashi(self):
         page = {**VALID_DATA["page"], "applicability": {"applicable": None, "limitations": None}}
         blocks = notion_helper._build_page_blocks(page)
-        bullets = [
-            b["bulleted_list_item"]["rich_text"][0]["text"]["content"]
+        paras = [
+            b["paragraph"]["rich_text"][0]["text"]["content"]
             for b in blocks
-            if b["type"] == "bulleted_list_item"
+            if b["type"] == "paragraph"
         ]
-        assert any("なし" in t for t in bullets)
+        assert any("なし" in t for t in paras)
 
 
 class TestCreateDbEntry:
