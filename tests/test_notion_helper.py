@@ -17,7 +17,7 @@ VALID_DATA = {
     "year": 2024,
     "venue": "NeurIPS",
     "page": {
-        "purpose": {"issue": "課題", "goal": "目標"},
+        "purpose": {"issue": "課題", "goal": "目標", "new": "新規性の説明"},
         "method": {
             "framework": "処理フロー",
             "models": [{"model": "GCN", "purpose": "特徴抽出"}],
@@ -69,21 +69,35 @@ class TestBuildPageBlocks:
             if b["type"] == type_
         ]
 
-    def test_headings(self):
+    def test_headings_h2(self):
         texts = [
             b["heading_2"]["rich_text"][0]["text"]["content"]
             for b in self.blocks
             if b["type"] == "heading_2"
         ]
-        assert "本研究の目的" in texts
-        assert "本研究の提案手法" in texts
+        assert "目的" in texts
+        assert "提案手法" in texts
         assert "実験" in texts
-        assert "私の研究での応用可能性" in texts
+        assert "特許ネットワークへの応用可能性" in texts
+
+    def test_headings_h3(self):
+        texts = [
+            b["heading_3"]["rich_text"][0]["text"]["content"]
+            for b in self.blocks
+            if b["type"] == "heading_3"
+        ]
+        assert "新規性" in texts
+        assert "処理フロー" in texts
+        assert "使用モデル" in texts
+        assert "入力データ" in texts
+        assert "出力" in texts
+        assert "データセット" in texts
 
     def test_purpose_bullets(self):
         bullets = self._block_texts("bulleted_list_item")
         assert any("課題" in t for t in bullets)
         assert any("目標" in t for t in bullets)
+        assert any("新規性の説明" in t for t in bullets)
 
     def test_models_expanded(self):
         bullets = self._block_texts("bulleted_list_item")

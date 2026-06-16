@@ -71,6 +71,9 @@ def _build_page_blocks(page: dict) -> list:
     def h2(text: str) -> dict:
         return {"object": "block", "type": "heading_2", "heading_2": {"rich_text": [{"text": {"content": text}}]}}
 
+    def h3(text: str) -> dict:
+        return {"object": "block", "type": "heading_3", "heading_3": {"rich_text": [{"text": {"content": text}}]}}
+
     def p(text: str) -> dict:
         return {"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"text": {"content": text}}]}}
 
@@ -83,35 +86,38 @@ def _build_page_blocks(page: dict) -> list:
     applicability = page["applicability"]
 
     blocks = [
-        h2("本研究の目的"),
+        h2("目的"),
         bullet(f"課題：{purpose['issue']}"),
         bullet(f"目標：{purpose['goal']}"),
-        h2("本研究の提案手法"),
-        p(f"処理フロー：{method['framework']}"),
-        p("使用モデル："),
+        h3("新規性"),
+        bullet(f"{purpose['new']}"),
+        h2("提案手法"),
+        h3("処理フロー"),
+        p(f"{method['framework']}"),
+        h3("使用モデル"),
     ]
 
     for m in method["models"]:
         blocks.append(bullet(f"{m['model']}（{m['purpose']}）"))
 
-    blocks.append(p("入力データ："))
+    blocks.append(h3("入力"))
     graph = method["input"]["graph"]
     blocks.append(bullet(f"グラフ構造：ノード：{graph['node']} / エッジ：{graph['edge']}"))
 
     if method["input"]["others"] is not None:
         blocks.append(bullet(f"その他：{method['input']['others']}"))
 
-    blocks.append(p(f"出力：{method['output']}"))
+    blocks.append(h3("出力"))
+    blocks.append(p(f"{method['output']}"))
     blocks.append(h2("実験"))
-    blocks.append(p("データセット："))
+    blocks.append(h3("データセット"))
 
     for ds in experiment["datasets"]:
         blocks.append(bullet(f"名称：{ds['name']} / ドメイン：{ds['domain']} / 規模：{ds['scale']}"))
 
     blocks.append(bullet(f"予測タスク：{experiment['task']}"))
     blocks.append(bullet(f"立証されたこと：{experiment['findings']}"))
-    blocks.append(h2("私の研究での応用可能性"))
-    blocks.append(bullet("前提条件：J-PLAT-PATの審査官引用による引用関係と各特許のテキスト情報（要約・特許請求の範囲・発明の詳細な説明）を使用する"))
+    blocks.append(h2("特許ネットワークへの応用可能性"))
     blocks.append(bullet(f"応用できる点：{applicability['applicable'] or 'なし'}"))
     blocks.append(bullet(f"課題・制約：{applicability['limitations'] or 'なし'}"))
 

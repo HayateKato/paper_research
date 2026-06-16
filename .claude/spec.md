@@ -52,24 +52,27 @@ DB エントリのページ本文に、以下の Notion ブロック構成で1�
 
 | ブロック種別 | 内容 |
 |---|---|
-| heading_2 | 本研究の目的 |
+| heading_2 | 目的 |
 | bulleted_list_item | 課題：{page.purpose.issue} |
 | bulleted_list_item | 目標：{page.purpose.goal} |
-| heading_2 | 本研究の提案手法 |
-| paragraph | 処理フロー：{page.method.framework} |
-| paragraph | 使用モデル： |
+| heading_3 | 新規性 |
+| bulleted_list_item | {page.purpose.new} |
+| heading_2 | 提案手法 |
+| heading_3 | 処理フロー |
+| paragraph | {page.method.framework} |
+| heading_3 | 使用モデル |
 | bulleted_list_item × N | {page.method.models[n].model}（{page.method.models[n].purpose}）← N 件展開 |
-| paragraph | 入力データ： |
+| heading_3 | 入力データ |
 | bulleted_list_item | グラフ構造：ノード：{page.method.input.graph.node} / エッジ：{page.method.input.graph.edge} |
 | bulleted_list_item | その他：{page.method.input.others}（null の場合はこの行を省略） |
-| paragraph | 出力：{page.method.output} |
+| heading_3 | 出力 |
+| paragraph | {page.method.output} |
 | heading_2 | 実験 |
-| paragraph | データセット： |
+| heading_3 | データセット |
 | bulleted_list_item × N | 名称：{name} / ドメイン：{domain} / 規模：{scale} ← N 件展開 |
 | bulleted_list_item | 予測タスク：{page.experiment.task} |
 | bulleted_list_item | 立証されたこと：{page.experiment.findings} |
-| heading_2 | 私の研究での応用可能性 |
-| bulleted_list_item | 前提条件：J-PLAT-PATの審査官引用による引用関係と各特許のテキスト情報（要約・特許請求の範囲・発明の詳細な説明）を使用する |
+| heading_2 | 特許ネットワークへの応用可能性 |
 | bulleted_list_item | 応用できる点：{page.applicability.applicable}（null の場合は「なし」） |
 | bulleted_list_item | 課題・制約：{page.applicability.limitations}（null の場合は「なし」） |
 
@@ -90,7 +93,8 @@ DB エントリのページ本文に、以下の Notion ブロック構成で1�
   "page": {
     "purpose": {
       "issue": "問題の説明",
-      "goal": "解決・実現したいこと"
+      "goal": "解決・実現したいこと",
+      "new": "従来手法と比較した新規性・差別化ポイント"
     },
     "method": {
       "framework": "処理フロー（入力から出力までのステップ説明）",
