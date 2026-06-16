@@ -149,7 +149,7 @@ def _build_page_blocks(page: dict) -> list:
     ]
 
     for m in method["models"]:
-        blocks.append(bullet(f"{m['model']}（{m['purpose']}）"))
+        blocks.append(bullet(f"{m['model']}：{m['purpose']}）"))
 
     inp = method["input"]
     blocks.append(h3("入力"))
