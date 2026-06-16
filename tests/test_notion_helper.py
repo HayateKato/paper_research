@@ -21,7 +21,7 @@ VALID_DATA = {
         "method": {
             "framework": "処理フロー",
             "models": [{"model": "GCN", "purpose": "特徴抽出"}],
-            "input": {"graph": {"node": "特許", "edge": "引用"}, "others": None},
+            "input": {"node": "特許", "edge": "引用", "others": None},
             "output": "埋め込みベクトル",
         },
         "experiment": {
@@ -109,7 +109,7 @@ class TestBuildPageBlocks:
 
     def test_others_included_when_not_null(self):
         page = {**VALID_DATA["page"]}
-        page["method"] = {**page["method"], "input": {**page["method"]["input"], "others": "追加入力"}}
+        page["method"] = {**page["method"], "input": {"node": "特許", "edge": "引用", "others": "追加入力"}}
         blocks = notion_helper._build_page_blocks(page)
         bullets = [
             b["bulleted_list_item"]["rich_text"][0]["text"]["content"]
