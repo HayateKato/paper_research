@@ -4,8 +4,11 @@
 """
 
 import json
+import os
 import sys
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 from scholar_helper import ScholarHelper
 
@@ -41,8 +44,10 @@ def main() -> None:
         print("使い方: python fetch.py \"論文タイトル\"")
         sys.exit(1)
 
+    load_dotenv()
     title = sys.argv[1]
-    helper = ScholarHelper()
+    api_key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
+    helper = ScholarHelper(api_key=api_key)
 
     print(f"Semantic Scholar で検索中: {title}")
     try:

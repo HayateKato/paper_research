@@ -10,6 +10,28 @@ class ScholarHelper:
 
     BASE_URL = "https://api.semanticscholar.org/graph/v1"
     SEARCH_FIELDS = "paperId,authors,openAccessPdf,publicationVenue,s2FieldsOfStudy"
+    MAX_RETRIES = 3
+
+    def __init__(self, api_key: str | None = None) -> None:
+        self._headers = {"x-api-key": api_key} if api_key else {}
+
+    def _get_with_retry(self, url: str, params: dict, timeout: int = 10) -> requests.Response:
+        """429 時に Retry-After 秒待機してリトライする GET リクエスト。
+
+        Raises:
+            requests.HTTPError: MAX_RETRIES 回失敗した場合、または 429 以外の HTTP エラー
+        """
+        for attempt in range(self.MAX_RETRIES):
+            resp = requests.get(url, params=params, headers=self._headers, timeout=timeout)
+            if resp.status_code == 429:
+                wait = int(resp.headers.get("Retry-After", 60))
+                print(f"レートリミット超過。{wait} 秒待機してリトライします... ({attempt + 1}/{self.MAX_RETRIES})")
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp
+        resp.raise_for_status()
+        return resp
 
     def search_by_title(self, title: str) -> dict | None:
         """タイトルで論文を検索する。
@@ -24,12 +46,10 @@ class ScholarHelper:
         Raises:
             requests.RequestException: API リクエスト失敗時
         """
-        resp = requests.get(
+        resp = self._get_with_retry(
             f"{self.BASE_URL}/paper/search",
             params={"query": title, "fields": self.SEARCH_FIELDS, "limit": 1},
-            timeout=10,
         )
-        resp.raise_for_status()
         data = resp.json()
         papers = data.get("data", [])
         return papers[0] if papers else None
@@ -47,12 +67,10 @@ class ScholarHelper:
             requests.RequestException: API リクエスト失敗時
         """
         time.sleep(1)
-        resp = requests.get(
+        resp = self._get_with_retry(
             f"{self.BASE_URL}/paper/{paper_id}",
             params={"fields": "citationStyles"},
-            timeout=10,
         )
-        resp.raise_for_status()
         data = resp.json()
         return data.get("citationStyles", {}).get("bibtex")
 

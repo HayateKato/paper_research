@@ -32,6 +32,43 @@ BIBTEX_RESPONSE = {
 }
 
 
+class TestGetWithRetry:
+    def _make_mock_resp(self, status_code: int, json_data: dict = None):
+        mock_resp = MagicMock()
+        mock_resp.status_code = status_code
+        mock_resp.headers = {}
+        if json_data is not None:
+            mock_resp.json.return_value = json_data
+        mock_resp.raise_for_status = MagicMock()
+        return mock_resp
+
+    def test_retries_on_429(self):
+        helper = ScholarHelper()
+        mock_429 = self._make_mock_resp(429)
+        mock_429.headers = {"Retry-After": "1"}
+        mock_ok = self._make_mock_resp(200, {})
+        with patch("scholar_helper.requests.get", side_effect=[mock_429, mock_ok]), \
+             patch("scholar_helper.time.sleep"):
+            resp = helper._get_with_retry("https://example.com", {})
+        assert resp == mock_ok
+
+    def test_adds_api_key_header(self):
+        helper = ScholarHelper(api_key="test-key")
+        mock_ok = self._make_mock_resp(200, {})
+        with patch("scholar_helper.requests.get", return_value=mock_ok) as mock_get:
+            helper._get_with_retry("https://example.com", {})
+        _, kwargs = mock_get.call_args
+        assert kwargs["headers"] == {"x-api-key": "test-key"}
+
+    def test_no_api_key_empty_header(self):
+        helper = ScholarHelper()
+        mock_ok = self._make_mock_resp(200, {})
+        with patch("scholar_helper.requests.get", return_value=mock_ok) as mock_get:
+            helper._get_with_retry("https://example.com", {})
+        _, kwargs = mock_get.call_args
+        assert kwargs["headers"] == {}
+
+
 class TestSearchByTitle:
     def _make_mock_resp(self, json_data):
         mock_resp = MagicMock()
