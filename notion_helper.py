@@ -66,6 +66,83 @@ def update_page_status(client: Client, page_id: str, status: str) -> None:
     )
 
 
+def create_initial_db_entry(
+    client: Client,
+    database_id: str,
+    title: str,
+    scholar: dict | None = None,
+    file_upload_id: str | None = None,
+) -> str:
+    """Scholar データのみで Notion DB に初期エントリを作成してページ ID を返す。
+
+    Tasks/Method/Data は設定しない。Status は "処理中" にする。
+
+    Args:
+        client: Notion クライアント
+        database_id: 書き込み先 DB の ID
+        title: 論文タイトル
+        scholar: scholar_data.json から取得した論文データ
+        file_upload_id: Notion Files API でアップロードした PDF の ID
+
+    Returns:
+        作成したページの ID
+    """
+    venue = (scholar.get("venue") if scholar else None) or ""
+    year = scholar.get("year") if scholar else None
+
+    props: dict = {
+        "Title": {"title": [{"text": {"content": title}}]},
+        "Status": {"status": {"name": "処理中"}},
+        "Venue": {"rich_text": [{"text": {"content": venue}}]},
+    }
+
+    if year is not None:
+        props["Year"] = {"number": year}
+
+    if scholar:
+        bibtex = scholar.get("bibtex") or ""
+        if bibtex:
+            props["BibTeX"] = {"rich_text": [{"text": {"content": bibtex}}]}
+        authors = scholar.get("authors") or []
+        if authors:
+            props["Authors"] = {"multi_select": [{"name": a} for a in authors]}
+
+    if file_upload_id:
+        props["PDF"] = {
+            "files": [
+                {
+                    "type": "file_upload",
+                    "file_upload": {"id": file_upload_id},
+                    "name": "paper.pdf",
+                }
+            ]
+        }
+
+    response = client.pages.create(
+        parent={"database_id": database_id},
+        properties=props,
+    )
+    return response["id"]
+
+
+def update_db_entry_properties(client: Client, page_id: str, data: dict) -> None:
+    """既存ページに Tasks, Method, Data プロパティを追記する。
+
+    Args:
+        client: Notion クライアント
+        page_id: 更新対象ページの ID
+        data: output の NotebookLM データ（tasks, method, data_domains を含む）
+    """
+    client.pages.update(
+        page_id=page_id,
+        properties={
+            "Tasks": {"multi_select": [{"name": t} for t in data["tasks"]]},
+            "Method": {"multi_select": [{"name": m} for m in data["method"]]},
+            "Data": {"multi_select": [{"name": d} for d in data["data_domains"]]},
+        },
+    )
+
+
 def create_db_entry(
     client: Client,
     database_id: str,
