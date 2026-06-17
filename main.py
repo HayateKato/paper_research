@@ -96,7 +96,8 @@ def main() -> None:
         print("scholar_data.json が見つからないか、タイトルが未登録です。BibTeX 等はスキップします。")
 
     file_upload_id = None
-    if PDF_FILE.exists():
+    has_pdf = PDF_FILE.exists() and (scholar is not None and scholar.get("pdf_url") is not None)
+    if has_pdf:
         print(f"{PDF_FILE} を Notion にアップロード中...")
         try:
             file_upload_id = upload_pdf(api_key, str(PDF_FILE))
@@ -106,6 +107,9 @@ def main() -> None:
                 print("警告: PDF アップロードに失敗しました（ファイルなし）。")
         except Exception as e:
             print(f"警告: PDF のアップロードに失敗しました。{e}")
+    else:
+        if PDF_FILE.exists():
+            print("警告: paper.pdf が存在しますが、この論文の PDF ではないためスキップします。")
 
     client = Client(auth=api_key)
 
