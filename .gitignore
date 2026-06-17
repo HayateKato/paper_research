@@ -5,3 +5,5 @@ __pycache__/
 .env
 results/
 output.txt
+scholar_data.json
+paper.pdf

@@ -1,6 +1,57 @@
 """Notion API ラッパー。DB エントリ作成とページ本文書き込みを担当する。"""
 
+from pathlib import Path
+
+import requests
 from notion_client import Client
+
+
+def upload_pdf(api_key: str, pdf_path: str) -> str | None:
+    """PDF を Notion Files API でアップロードして file_upload_id を返す。
+
+    Args:
+        api_key: Notion API キー
+        pdf_path: アップロードする PDF ファイルのパス
+
+    Returns:
+        file_upload_id。ファイルが存在しない場合や失敗時は None。
+
+    Raises:
+        requests.HTTPError: Notion API エラー時
+    """
+    path = Path(pdf_path)
+    if not path.exists():
+        return None
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+    }
+
+    resp = requests.post(
+        "https://api.notion.com/v1/file_uploads",
+        headers=headers,
+        json={"name": path.name},
+    )
+    resp.raise_for_status()
+    upload_data = resp.json()
+    file_upload_id = upload_data["id"]
+    upload_url = upload_data["upload_url"]
+
+    upload_headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Notion-Version": "2022-06-28",
+    }
+    with open(path, "rb") as f:
+        upload_resp = requests.put(
+            upload_url,
+            headers=upload_headers,
+            files={"file": (path.name, f, "application/pdf")},
+        )
+    upload_resp.raise_for_status()
+
+    return file_upload_id
 
 
 def update_page_status(client: Client, page_id: str, status: str) -> None:
@@ -17,13 +68,21 @@ def update_page_status(client: Client, page_id: str, status: str) -> None:
     )
 
 
-def create_db_entry(client: Client, database_id: str, data: dict) -> str:
+def create_db_entry(
+    client: Client,
+    database_id: str,
+    data: dict,
+    scholar: dict | None = None,
+    file_upload_id: str | None = None,
+) -> str:
     """Notion DB に新規エントリを作成してページ ID を返す。
 
     Args:
         client: Notion クライアント
         database_id: 書き込み先 DB の ID
-        data: output.json のトップレベル辞書
+        data: output.txt のトップレベル辞書
+        scholar: scholar_data.json から取得した論文データ（BibTeX・Authors 等）
+        file_upload_id: Notion Files API でアップロードした PDF の ID
 
     Returns:
         作成したページの ID
@@ -33,7 +92,7 @@ def create_db_entry(client: Client, database_id: str, data: dict) -> str:
     """
     response = client.pages.create(
         parent={"database_id": database_id},
-        properties=_build_db_properties(data),
+        properties=_build_db_properties(data, scholar=scholar, file_upload_id=file_upload_id),
     )
     return response["id"]
 
@@ -53,24 +112,58 @@ def create_page_body(client: Client, page_id: str, data: dict) -> None:
     client.blocks.children.append(block_id=page_id, children=blocks)
 
 
-def _build_db_properties(data: dict) -> dict:
+def _build_db_properties(
+    data: dict,
+    scholar: dict | None = None,
+    file_upload_id: str | None = None,
+) -> dict:
     """DB エントリのプロパティ辞書を構築する。
 
     Args:
-        data: output.json のトップレベル辞書
+        data: output.txt のトップレベル辞書
+        scholar: scholar_data.json から取得した論文データ
+        file_upload_id: Notion Files API でアップロードした PDF の ID
 
     Returns:
         Notion API に渡すプロパティ辞書
     """
-    return {
+    venue = data["venue"] or (scholar.get("venue") if scholar else None) or ""
+
+    props: dict = {
         "Title": {"title": [{"text": {"content": data["title"]}}]},
         "Status": {"status": {"name": "完了"}},
         "Tasks": {"multi_select": [{"name": t} for t in data["tasks"]]},
         "Method": {"multi_select": [{"name": m} for m in data["method"]]},
         "Data": {"multi_select": [{"name": d} for d in data["data_domains"]]},
         "Year": {"number": data["year"]},
-        "Venue": {"rich_text": [{"text": {"content": data["venue"] or ""}}]},
+        "Venue": {"rich_text": [{"text": {"content": venue}}]},
     }
+
+    if scholar:
+        bibtex = scholar.get("bibtex") or ""
+        if bibtex:
+            props["BibTeX"] = {"rich_text": [{"text": {"content": bibtex}}]}
+
+        authors = scholar.get("authors") or []
+        if authors:
+            props["Authors"] = {"multi_select": [{"name": a} for a in authors]}
+
+        fields = scholar.get("fields_of_study") or []
+        if fields:
+            props["Field of Study"] = {"multi_select": [{"name": f} for f in fields]}
+
+    if file_upload_id:
+        props["PDF"] = {
+            "files": [
+                {
+                    "type": "file_upload",
+                    "file_upload": {"id": file_upload_id},
+                    "name": "paper.pdf",
+                }
+            ]
+        }
+
+    return props
 
 
 def _build_page_blocks(page: dict) -> list:

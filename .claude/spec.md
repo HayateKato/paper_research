@@ -2,39 +2,55 @@
 
 ## 概要
 
-NotebookLM で論文を解析した JSON 出力を `output.json` に貼り付けて `python main.py` を実行するだけで、Notion DB エントリとページ本文を自動作成する。Claude API は使用しない。
+NotebookLM で論文を解析した JSON 出力を `output.txt` に貼り付けて `python main.py` を実行するだけで、Notion DB エントリとページ本文を自動作成する。Claude API は使用しない。
 
 ---
 
 ## ユーザーの作業手順
 
-1. NotebookLM に `prompts/user.md`（プロンプト）と論文 PDF を投げる
-2. 返ってきた JSON を `output.json` に貼り付けて保存
-3. `python main.py` を実行
-
-以上。
+1. `python fetch.py "論文タイトル"` を実行（Semantic Scholar から PDF・メタデータを取得）
+2. ダウンロードされた `paper.pdf` を NotebookLM に渡し、JSON を取得
+3. 返ってきた JSON を `output.txt` に貼り付けて保存
+4. `python main.py` を実行
 
 ---
 
 ## 実行フロー
 
+### fetch.py（1回目）
+
+```
+python fetch.py "論文タイトル"
+  ↓
+Semantic Scholar API でタイトル検索
+  → BibTeX・著者名・Venue・Field of Study を取得
+  → PDF URL 取得 → paper.pdf をダウンロード
+  → scholar_data.json に { "論文タイトル": {...} } を upsert（蓄積）
+```
+
+### main.py（2回目）
+
 ```
 python main.py
   ↓
-output.json を読み込んで JSON をパース・バリデーション
+output.txt を読み込んで JSON をパース・バリデーション
+  ↓
+scholar_data.json から output.txt の title をキーで取得（存在する場合）
+  ↓
+paper.pdf が存在する場合は Notion Files API でアップロード
   ↓
 Notion DB に新規エントリを作成（プロパティ設定）
   ↓
 Notion ページ本文に論文整理を書き込み
   ↓
-output.json を results/{タイムスタンプ}.json に移動（二重登録防止・バックアップ）
+output.txt を results/{タイムスタンプ}.txt に移動（二重登録防止・バックアップ）
 ```
 
 ---
 
 ## Notion DB スキーマ
 
-| カラム名 | 型 | 取得元 | JSON キー |
+| カラム名 | 型 | 取得元 | JSON キー / ソース |
 |---|---|---|---|
 | Title | title | JSON | `title` |
 | Status | status | スクリプト | 完了 / エラー |
@@ -42,7 +58,11 @@ output.json を results/{タイムスタンプ}.json に移動（二重登録防
 | Method | multi_select | JSON | `method` |
 | Data | multi_select | JSON | `data_domains` |
 | Year | number | JSON | `year` |
-| Venue | rich_text | JSON | `venue` |
+| Venue | rich_text | JSON → Semantic Scholar 補完 | `venue`（null 時は scholar_data の `venue`） |
+| BibTeX | rich_text | scholar_data.json | `bibtex` |
+| Authors | multi_select | scholar_data.json | `authors` |
+| Field of Study | multi_select | scholar_data.json | `fields_of_study` |
+| PDF | files | Notion Files API | paper.pdf をアップロード |
 
 ---
 
@@ -88,9 +108,9 @@ DB エントリのページ本文に、以下の Notion ブロック構成で1�
 
 ---
 
-## 入力 JSON フォーマット（`output.json`）
+## 入力 JSON フォーマット（`output.txt`）
 
-`prompt/notebooklm.md` の出力形式に準拠。
+`prompts/notebooklm.md` の出力形式に準拠。
 
 ```json
 {
@@ -138,15 +158,37 @@ DB エントリのページ本文に、以下の Notion ブロック構成で1�
 
 ---
 
+## scholar_data.json フォーマット（蓄積型・タイトルをキー）
+
+```json
+{
+  "論文タイトル A": {
+    "bibtex": "@article{...}",
+    "authors": ["Author A", "Author B"],
+    "venue": "ICLR 2024",
+    "fields_of_study": ["Computer Science", "Machine Learning"],
+    "pdf_url": "https://..."
+  }
+}
+```
+
+fetch.py 実行ごとにタイトルキーで upsert する。
+
+---
+
 ## ファイル構成
 
 ```
 paper_research/
 ├── .env                    # API キー（git 管理外）
 ├── .env.example
-├── output.json             # NotebookLM の出力を貼り付けるファイル（git 管理外）
-├── results/                # 処理済み JSON のバックアップ（git 管理外）
-├── main.py                 # エントリーポイント
+├── output.txt              # NotebookLM の出力を貼り付けるファイル（git 管理外）
+├── scholar_data.json       # Semantic Scholar 取得データの蓄積（git 管理外）
+├── paper.pdf               # 直近のダウンロード PDF（git 管理外）
+├── results/                # 処理済みファイルのバックアップ（git 管理外）
+├── main.py                 # エントリーポイント（2回目に実行）
+├── fetch.py                # Semantic Scholar 取得スクリプト（1回目に実行）
+├── scholar_helper.py       # Semantic Scholar API ラッパー
 ├── notion_helper.py        # Notion API ラッパー
 ├── prompts/
 │   └── notebooklm.md       # NotebookLM に投げるプロンプト
@@ -169,17 +211,33 @@ NOTION_DATABASE_ID=...
 ```
 notion-client
 python-dotenv
+requests
 ```
 
 ---
 
 ## エラーハンドリング
 
+### fetch.py 側
+
 | エラーケース | 対応 |
 |---|---|
-| `output.json` が存在しない | エラーメッセージを出力して終了 |
+| Semantic Scholar でヒットなし | エラーメッセージを出力して終了（scholar_data.json を更新しない） |
+| Semantic Scholar API エラー | エラーメッセージを出力して終了 |
+| PDF URL が存在しない（非 OA） | 警告を出力し、その他フィールドのみ scholar_data.json に保存 |
+| PDF ダウンロード失敗 | 警告を出力し、pdf_url のみ scholar_data.json に保存（paper.pdf は作成しない） |
+
+### main.py 側
+
+| エラーケース | 対応 |
+|---|---|
+| `output.txt` が存在しない | エラーメッセージを出力して終了 |
 | JSON パース失敗 | エラーメッセージを出力して終了（results/ に移動しない） |
 | 必須キー欠落 | エラーメッセージを出力して終了（results/ に移動しない） |
+| scholar_data.json が存在しない | スキップ（BibTeX 等なしで Notion 登録を続行） |
+| title が scholar_data.json に未登録 | スキップ（BibTeX 等なしで Notion 登録を続行） |
+| paper.pdf が存在しない | PDF カラムを空にして続行 |
+| Notion Files API エラー | 警告を出力し、PDF なしで続行 |
 | Notion DB 書き込みエラー | エラーメッセージを出力して終了（results/ に移動しない） |
 | Notion ページ書き込みエラー | ログ出力のみ（DB エントリは作成済みのため results/ に移動する） |
 
@@ -204,6 +262,9 @@ pip install -r requirements.txt
 cp .env.example .env
 # .env に Notion API キーを記入
 
-# output.json に NotebookLM の出力を貼り付けた後に実行
+# 1回目: PDF 取得
+python fetch.py "論文タイトル"
+
+# 2回目: output.txt に NotebookLM の出力を貼り付けた後に実行
 python main.py
 ```

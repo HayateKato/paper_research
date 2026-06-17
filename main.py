@@ -10,10 +10,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 from notion_client import Client
 
-from notion_helper import create_db_entry, create_page_body, update_page_status
+from notion_helper import create_db_entry, create_page_body, update_page_status, upload_pdf
 
 OUTPUT_FILE = Path("output.txt")
 RESULTS_DIR = Path("results")
+SCHOLAR_DATA_FILE = Path("scholar_data.json")
+PDF_FILE = Path("paper.pdf")
 
 REQUIRED_KEYS = {"title", "tasks", "method", "data_domains", "year", "venue", "page"}
 
@@ -49,8 +51,26 @@ def load_output() -> dict:
     return data
 
 
+def load_scholar_data(title: str) -> dict | None:
+    """scholar_data.json から title に対応するデータを読み込む。
+
+    Args:
+        title: 検索するキー（論文タイトル）
+
+    Returns:
+        scholar データの辞書。ファイルがない・タイトルが未登録の場合は None。
+    """
+    if not SCHOLAR_DATA_FILE.exists():
+        return None
+    try:
+        all_data = json.loads(SCHOLAR_DATA_FILE.read_text(encoding="utf-8"))
+        return all_data.get(title)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
 def archive_output() -> None:
-    """output.txt を results/{タイムスタンプ}.json にコピーする。"""
+    """output.txt を results/{タイムスタンプ}.txt にコピーする。"""
     RESULTS_DIR.mkdir(exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     dest = RESULTS_DIR / f"{timestamp}.txt"
@@ -69,10 +89,28 @@ def main() -> None:
         sys.exit(1)
 
     data = load_output()
+    scholar = load_scholar_data(data["title"])
+    if scholar:
+        print(f"scholar_data.json からデータを読み込みました: {data['title']}")
+    else:
+        print("scholar_data.json が見つからないか、タイトルが未登録です。BibTeX 等はスキップします。")
+
+    file_upload_id = None
+    if PDF_FILE.exists():
+        print(f"{PDF_FILE} を Notion にアップロード中...")
+        try:
+            file_upload_id = upload_pdf(api_key, str(PDF_FILE))
+            if file_upload_id:
+                print("PDF のアップロードが完了しました。")
+            else:
+                print("警告: PDF アップロードに失敗しました（ファイルなし）。")
+        except Exception as e:
+            print(f"警告: PDF のアップロードに失敗しました。{e}")
+
     client = Client(auth=api_key)
 
     try:
-        page_id = create_db_entry(client, database_id, data)
+        page_id = create_db_entry(client, database_id, data, scholar=scholar, file_upload_id=file_upload_id)
         print(f"DB エントリを作成しました: {page_id}")
     except Exception as e:
         print(f"エラー: Notion DB への書き込みに失敗しました。{e}")
