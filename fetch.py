@@ -60,17 +60,18 @@ def main() -> None:
         print("エラー: 論文が見つかりませんでした。")
         sys.exit(1)
 
-    print(f"論文が見つかりました: {paper.get('paperId')}")
+    if not helper.validate_title(title, paper):
+        print(f"エラー: タイトルが一致しません。")
+        print(f"  入力: {title}")
+        print(f"  取得: {paper.get('title')}")
+        sys.exit(1)
 
-    bibtex = None
-    try:
-        bibtex = helper.get_bibtex(paper["paperId"])
-    except Exception as e:
-        print(f"警告: BibTeX の取得に失敗しました。{e}")
+    print(f"論文が見つかりました: {paper.get('title')}")
 
+    bibtex = helper.get_bibtex(paper)
     authors = helper.format_authors(paper)
     venue = helper.format_venue(paper)
-    fields_of_study = helper.format_fields_of_study(paper)
+    year = helper.format_year(paper)
     pdf_url = helper.get_pdf_url(paper)
 
     if pdf_url:
@@ -89,7 +90,7 @@ def main() -> None:
         "bibtex": bibtex,
         "authors": authors,
         "venue": venue,
-        "fields_of_study": fields_of_study,
+        "year": year,
         "pdf_url": pdf_url,
     }
     save_scholar_data(scholar_data)

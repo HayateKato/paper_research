@@ -22,8 +22,9 @@ NotebookLM で論文を解析した JSON 出力を `output.txt` に貼り付け�
 ```
 python fetch.py "論文タイトル"
   ↓
-Semantic Scholar API でタイトル検索
-  → BibTeX・著者名・Venue・Field of Study を取得
+Semantic Scholar /paper/search/match でタイトル検索（1回のAPIコール）
+  → レスポンスのタイトルと入力タイトルを照合してバリデーション
+  → BibTeX から著者名・Venue・Year を解析
   → PDF URL 取得 → paper.pdf をダウンロード
   → scholar_data.json に { "論文タイトル": {...} } を upsert（蓄積）
 ```
@@ -61,7 +62,6 @@ output.txt を results/{タイムスタンプ}.txt に移動（二重登録防�
 | Venue | rich_text | JSON → Semantic Scholar 補完 | `venue`（null 時は scholar_data の `venue`） |
 | BibTeX | rich_text | scholar_data.json | `bibtex` |
 | Authors | multi_select | scholar_data.json | `authors` |
-| Field of Study | multi_select | scholar_data.json | `fields_of_study` |
 | PDF | files | Notion Files API | paper.pdf をアップロード |
 
 ---
@@ -166,7 +166,7 @@ DB エントリのページ本文に、以下の Notion ブロック構成で1�
     "bibtex": "@article{...}",
     "authors": ["Author A", "Author B"],
     "venue": "ICLR 2024",
-    "fields_of_study": ["Computer Science", "Machine Learning"],
+    "year": 2024,
     "pdf_url": "https://..."
   }
 }

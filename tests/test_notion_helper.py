@@ -148,11 +148,6 @@ class TestBuildDbPropertiesWithScholar:
         assert "Alice Smith" in names
         assert "Bob Lee" in names
 
-    def test_fields_of_study_multi_select(self):
-        props = notion_helper._build_db_properties(VALID_DATA, scholar=self.SCHOLAR)
-        names = [o["name"] for o in props["Field of Study"]["multi_select"]]
-        assert "Computer Science" in names
-
     def test_pdf_file_upload(self):
         props = notion_helper._build_db_properties(
             VALID_DATA, scholar=self.SCHOLAR, file_upload_id="upload-id-123"

@@ -9,26 +9,26 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from scholar_helper import ScholarHelper
 
-SEARCH_RESPONSE = {
+BIBTEX = (
+    "@Article{Smith2024,\n"
+    " author = {Alice Smith and Bob Lee},\n"
+    " booktitle = {NeurIPS},\n"
+    " journal = {Journal of AI},\n"
+    " title = {Test Paper},\n"
+    " year = {2024}\n"
+    "}\n"
+)
+
+MATCH_RESPONSE = {
     "data": [
         {
             "paperId": "paper-abc",
-            "authors": [{"authorId": "1", "name": "Alice Smith"}, {"authorId": "2", "name": "Bob Lee"}],
+            "title": "Test Paper",
             "openAccessPdf": {"url": "https://example.com/paper.pdf", "status": "GREEN"},
-            "publicationVenue": {"id": "v1", "name": "NeurIPS"},
-            "s2FieldsOfStudy": [
-                {"category": "Computer Science", "source": "s2-fos-model"},
-                {"category": "Mathematics", "source": "s2-fos-model"},
-                {"category": "Computer Science", "source": "external"},
-            ],
+            "citationStyles": {"bibtex": BIBTEX},
+            "matchScore": 150.0,
         }
     ]
-}
-
-BIBTEX_RESPONSE = {
-    "citationStyles": {
-        "bibtex": "@article{smith2024,\n  title={Test Paper},\n  author={Alice Smith}\n}"
-    }
 }
 
 
@@ -79,9 +79,9 @@ class TestSearchByTitle:
     def test_returns_first_result(self):
         helper = ScholarHelper()
         with patch("scholar_helper.requests.get") as mock_get:
-            mock_get.return_value = self._make_mock_resp(SEARCH_RESPONSE)
+            mock_get.return_value = self._make_mock_resp(MATCH_RESPONSE)
             result = helper.search_by_title("Test Paper")
-        assert result["paperId"] == "paper-abc"
+        assert result["title"] == "Test Paper"
 
     def test_returns_none_when_empty(self):
         helper = ScholarHelper()
@@ -90,52 +90,79 @@ class TestSearchByTitle:
             result = helper.search_by_title("Unknown Paper")
         assert result is None
 
-    def test_passes_correct_params(self):
+    def test_uses_match_endpoint(self):
         helper = ScholarHelper()
         with patch("scholar_helper.requests.get") as mock_get:
-            mock_get.return_value = self._make_mock_resp(SEARCH_RESPONSE)
+            mock_get.return_value = self._make_mock_resp(MATCH_RESPONSE)
             helper.search_by_title("My Paper")
-        _, kwargs = mock_get.call_args
+        args, kwargs = mock_get.call_args
+        assert "search/match" in args[0]
         assert kwargs["params"]["query"] == "My Paper"
-        assert kwargs["params"]["limit"] == 1
+
+
+class TestValidateTitle:
+    def test_exact_match(self):
+        helper = ScholarHelper()
+        paper = {"title": "Test Paper"}
+        assert helper.validate_title("Test Paper", paper) is True
+
+    def test_case_insensitive(self):
+        helper = ScholarHelper()
+        paper = {"title": "test paper"}
+        assert helper.validate_title("Test Paper", paper) is True
+
+    def test_ignores_punctuation(self):
+        helper = ScholarHelper()
+        paper = {"title": "Test: A Paper"}
+        assert helper.validate_title("Test A Paper", paper) is True
+
+    def test_mismatch_returns_false(self):
+        helper = ScholarHelper()
+        paper = {"title": "Completely Different Title"}
+        assert helper.validate_title("Test Paper", paper) is False
 
 
 class TestGetBibtex:
-    def _make_mock_resp(self, json_data):
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = json_data
-        mock_resp.raise_for_status = MagicMock()
-        return mock_resp
-
-    def test_returns_bibtex_string(self):
+    def test_returns_bibtex_from_paper(self):
         helper = ScholarHelper()
-        with patch("scholar_helper.requests.get") as mock_get, \
-             patch("scholar_helper.time.sleep"):
-            mock_get.return_value = self._make_mock_resp(BIBTEX_RESPONSE)
-            result = helper.get_bibtex("paper-abc")
-        assert "@article" in result
+        paper = MATCH_RESPONSE["data"][0]
+        result = helper.get_bibtex(paper)
+        assert "@Article" in result
 
     def test_returns_none_when_missing(self):
         helper = ScholarHelper()
-        with patch("scholar_helper.requests.get") as mock_get, \
-             patch("scholar_helper.time.sleep"):
-            mock_get.return_value = self._make_mock_resp({"citationStyles": {}})
-            result = helper.get_bibtex("paper-abc")
-        assert result is None
+        assert helper.get_bibtex({"citationStyles": {}}) is None
 
-    def test_sleeps_before_request(self):
+    def test_returns_none_when_no_citation_styles(self):
         helper = ScholarHelper()
-        with patch("scholar_helper.requests.get") as mock_get, \
-             patch("scholar_helper.time.sleep") as mock_sleep:
-            mock_get.return_value = self._make_mock_resp(BIBTEX_RESPONSE)
-            helper.get_bibtex("paper-abc")
-        mock_sleep.assert_called_once_with(1)
+        assert helper.get_bibtex({}) is None
+
+
+class TestParseBibtexField:
+    def test_extracts_author(self):
+        helper = ScholarHelper()
+        result = helper._parse_bibtex_field(BIBTEX, "author")
+        assert result == "Alice Smith and Bob Lee"
+
+    def test_extracts_year(self):
+        helper = ScholarHelper()
+        result = helper._parse_bibtex_field(BIBTEX, "year")
+        assert result == "2024"
+
+    def test_extracts_booktitle(self):
+        helper = ScholarHelper()
+        result = helper._parse_bibtex_field(BIBTEX, "booktitle")
+        assert result == "NeurIPS"
+
+    def test_returns_none_when_field_missing(self):
+        helper = ScholarHelper()
+        assert helper._parse_bibtex_field(BIBTEX, "nonexistent") is None
 
 
 class TestGetPdfUrl:
     def test_returns_url(self):
         helper = ScholarHelper()
-        paper = SEARCH_RESPONSE["data"][0]
+        paper = MATCH_RESPONSE["data"][0]
         assert helper.get_pdf_url(paper) == "https://example.com/paper.pdf"
 
     def test_returns_none_when_missing(self):
@@ -150,57 +177,51 @@ class TestGetPdfUrl:
 class TestFormatAuthors:
     def test_returns_names(self):
         helper = ScholarHelper()
-        paper = SEARCH_RESPONSE["data"][0]
+        paper = MATCH_RESPONSE["data"][0]
         assert helper.format_authors(paper) == ["Alice Smith", "Bob Lee"]
 
-    def test_empty_authors(self):
+    def test_empty_when_no_bibtex(self):
         helper = ScholarHelper()
-        assert helper.format_authors({"authors": []}) == []
+        assert helper.format_authors({}) == []
 
-    def test_skips_missing_name(self):
+    def test_empty_when_no_author_field(self):
         helper = ScholarHelper()
-        paper = {"authors": [{"authorId": "1"}, {"authorId": "2", "name": "Bob"}]}
-        assert helper.format_authors(paper) == ["Bob"]
+        paper = {"citationStyles": {"bibtex": "@article{x, title={T}}"}}
+        assert helper.format_authors(paper) == []
 
 
 class TestFormatVenue:
-    def test_returns_publication_venue_name(self):
+    def test_returns_booktitle(self):
         helper = ScholarHelper()
-        paper = SEARCH_RESPONSE["data"][0]
+        paper = MATCH_RESPONSE["data"][0]
         assert helper.format_venue(paper) == "NeurIPS"
 
-    def test_falls_back_to_venue_field(self):
+    def test_falls_back_to_journal(self):
         helper = ScholarHelper()
-        paper = {"publicationVenue": None, "venue": "ICML 2024"}
-        assert helper.format_venue(paper) == "ICML 2024"
+        bibtex = "@article{x, journal = {TPAMI}, title={T}, year={2024}}"
+        paper = {"citationStyles": {"bibtex": bibtex}}
+        assert helper.format_venue(paper) == "TPAMI"
 
     def test_returns_none_when_both_missing(self):
         helper = ScholarHelper()
-        assert helper.format_venue({}) is None
-
-    def test_returns_none_when_venue_empty_string(self):
-        helper = ScholarHelper()
-        paper = {"publicationVenue": None, "venue": ""}
+        paper = {"citationStyles": {"bibtex": "@article{x, title={T}}"}}
         assert helper.format_venue(paper) is None
 
 
-class TestFormatFieldsOfStudy:
-    def test_deduplicates(self):
+class TestFormatYear:
+    def test_returns_year_as_int(self):
         helper = ScholarHelper()
-        paper = SEARCH_RESPONSE["data"][0]
-        result = helper.format_fields_of_study(paper)
-        assert result.count("Computer Science") == 1
+        paper = MATCH_RESPONSE["data"][0]
+        assert helper.format_year(paper) == 2024
 
-    def test_preserves_order(self):
+    def test_returns_none_when_no_year(self):
         helper = ScholarHelper()
-        paper = SEARCH_RESPONSE["data"][0]
-        result = helper.format_fields_of_study(paper)
-        assert result[0] == "Computer Science"
-        assert result[1] == "Mathematics"
+        paper = {"citationStyles": {"bibtex": "@article{x, title={T}}"}}
+        assert helper.format_year(paper) is None
 
-    def test_empty(self):
+    def test_returns_none_when_no_bibtex(self):
         helper = ScholarHelper()
-        assert helper.format_fields_of_study({}) == []
+        assert helper.format_year({}) is None
 
 
 class TestDownloadPdf:

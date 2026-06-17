@@ -1,5 +1,6 @@
 """Semantic Scholar API ラッパー。論文メタデータ取得と PDF ダウンロードを担当する。"""
 
+import re
 import time
 
 import requests
@@ -9,8 +10,8 @@ class ScholarHelper:
     """Semantic Scholar Graph API のラッパークラス。"""
 
     BASE_URL = "https://api.semanticscholar.org/graph/v1"
-    SEARCH_FIELDS = "paperId,authors,openAccessPdf,publicationVenue,s2FieldsOfStudy"
-    MAX_RETRIES = 3
+    MATCH_FIELDS = "title,citationStyles,openAccessPdf"
+    MAX_RETRIES = 2
 
     def __init__(self, api_key: str | None = None) -> None:
         self._headers = {"x-api-key": api_key} if api_key else {}
@@ -34,45 +35,51 @@ class ScholarHelper:
         return resp
 
     def search_by_title(self, title: str) -> dict | None:
-        """タイトルで論文を検索する。
+        """タイトルで論文を検索する（/paper/search/match エンドポイント使用）。
 
         Args:
             title: 検索する論文タイトル
 
         Returns:
-            ヒットした論文の辞書（paperId, authors, openAccessPdf,
-            publicationVenue, s2FieldsOfStudy を含む）。見つからない場合は None。
+            ヒットした論文の辞書（title, citationStyles, openAccessPdf を含む）。
+            見つからない場合は None。
 
         Raises:
             requests.RequestException: API リクエスト失敗時
         """
         resp = self._get_with_retry(
-            f"{self.BASE_URL}/paper/search",
-            params={"query": title, "fields": self.SEARCH_FIELDS, "limit": 1},
+            f"{self.BASE_URL}/paper/search/match",
+            params={"query": title, "fields": self.MATCH_FIELDS},
         )
         data = resp.json()
         papers = data.get("data", [])
         return papers[0] if papers else None
 
-    def get_bibtex(self, paper_id: str) -> str | None:
-        """paperId から BibTeX 文字列を取得する。
+    def validate_title(self, query: str, paper: dict) -> bool:
+        """入力タイトルとレスポンスのタイトルを正規化して一致確認する。
 
         Args:
-            paper_id: Semantic Scholar の論文 ID
+            query: 検索に使ったタイトル
+            paper: search_by_title の返り値
+
+        Returns:
+            タイトルが一致すれば True
+        """
+        def normalize(s: str) -> str:
+            return re.sub(r"[^a-z0-9]", "", s.lower())
+
+        return normalize(query) == normalize(paper.get("title", ""))
+
+    def get_bibtex(self, paper: dict) -> str | None:
+        """citationStyles から BibTeX 文字列を取得する。
+
+        Args:
+            paper: search_by_title の返り値
 
         Returns:
             BibTeX 文字列。取得できない場合は None。
-
-        Raises:
-            requests.RequestException: API リクエスト失敗時
         """
-        time.sleep(1)
-        resp = self._get_with_retry(
-            f"{self.BASE_URL}/paper/{paper_id}",
-            params={"fields": "citationStyles"},
-        )
-        data = resp.json()
-        return data.get("citationStyles", {}).get("bibtex")
+        return paper.get("citationStyles", {}).get("bibtex")
 
     def get_pdf_url(self, paper: dict) -> str | None:
         """検索結果から openAccessPdf URL を抽出する。
@@ -88,8 +95,22 @@ class ScholarHelper:
             return pdf.get("url")
         return None
 
+    def _parse_bibtex_field(self, bibtex: str, field: str) -> str | None:
+        """BibTeX 文字列から指定フィールドの値を抽出する。
+
+        Args:
+            bibtex: BibTeX 文字列
+            field: 抽出するフィールド名（例: "author", "year"）
+
+        Returns:
+            フィールドの値。見つからない場合は None。
+        """
+        pattern = rf"{re.escape(field)}\s*=\s*\{{([^}}]+)\}}"
+        m = re.search(pattern, bibtex, re.IGNORECASE)
+        return m.group(1).strip() if m else None
+
     def format_authors(self, paper: dict) -> list[str]:
-        """authors リストを ['Author A', 'Author B'] の形式で返す。
+        """BibTeX の author フィールドを ['Author A', 'Author B'] の形式で返す。
 
         Args:
             paper: search_by_title の返り値
@@ -97,11 +118,14 @@ class ScholarHelper:
         Returns:
             著者名のリスト
         """
-        authors = paper.get("authors", [])
-        return [a["name"] for a in authors if a.get("name")]
+        bibtex = self.get_bibtex(paper) or ""
+        raw = self._parse_bibtex_field(bibtex, "author")
+        if not raw:
+            return []
+        return [a.strip() for a in raw.split(" and ") if a.strip()]
 
     def format_venue(self, paper: dict) -> str | None:
-        """publicationVenue.name を返す。なければ venue フィールドを返す。
+        """BibTeX の booktitle または journal フィールドを返す。
 
         Args:
             paper: search_by_title の返り値
@@ -109,31 +133,27 @@ class ScholarHelper:
         Returns:
             会議・ジャーナル名。取得できない場合は None。
         """
-        venue = paper.get("publicationVenue")
-        if venue and isinstance(venue, dict):
-            name = venue.get("name")
-            if name:
-                return name
-        return paper.get("venue") or None
+        bibtex = self.get_bibtex(paper) or ""
+        return (
+            self._parse_bibtex_field(bibtex, "booktitle")
+            or self._parse_bibtex_field(bibtex, "journal")
+        )
 
-    def format_fields_of_study(self, paper: dict) -> list[str]:
-        """s2FieldsOfStudy の category を重複除去して返す。
+    def format_year(self, paper: dict) -> int | None:
+        """BibTeX の year フィールドを整数で返す。
 
         Args:
             paper: search_by_title の返り値
 
         Returns:
-            研究分野のリスト（重複なし）
+            出版年。取得できない場合は None。
         """
-        fields = paper.get("s2FieldsOfStudy", [])
-        seen: set[str] = set()
-        result: list[str] = []
-        for f in fields:
-            cat = f.get("category")
-            if cat and cat not in seen:
-                seen.add(cat)
-                result.append(cat)
-        return result
+        bibtex = self.get_bibtex(paper) or ""
+        raw = self._parse_bibtex_field(bibtex, "year")
+        try:
+            return int(raw) if raw else None
+        except ValueError:
+            return None
 
     def download_pdf(self, url: str, dest: str = "paper.pdf") -> bool:
         """PDF を url からダウンロードして dest に保存する。

@@ -148,10 +148,6 @@ def _build_db_properties(
         if authors:
             props["Authors"] = {"multi_select": [{"name": a} for a in authors]}
 
-        fields = scholar.get("fields_of_study") or []
-        if fields:
-            props["Field of Study"] = {"multi_select": [{"name": f} for f in fields]}
-
     if file_upload_id:
         props["PDF"] = {
             "files": [
