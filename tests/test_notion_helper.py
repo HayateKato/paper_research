@@ -14,8 +14,6 @@ VALID_DATA = {
     "tasks": ["ノード分類"],
     "method": ["GNN"],
     "data_domains": ["特許"],
-    "year": 2024,
-    "venue": "NeurIPS",
     "page": {
         "purpose": {"issue": "課題", "goal": "目標", "new": "新規性の説明"},
         "method": {
@@ -44,17 +42,26 @@ class TestBuildDbProperties:
         names = [o["name"] for o in props["Tasks"]["multi_select"]]
         assert "ノード分類" in names
 
-    def test_year(self):
-        props = notion_helper._build_db_properties(VALID_DATA)
+    def test_year_from_scholar(self):
+        scholar = {"year": 2024, "venue": None}
+        props = notion_helper._build_db_properties(VALID_DATA, scholar=scholar)
         assert props["Year"]["number"] == 2024
 
-    def test_venue(self):
-        props = notion_helper._build_db_properties(VALID_DATA)
+    def test_year_absent_when_no_scholar(self):
+        props = notion_helper._build_db_properties(VALID_DATA, scholar=None)
+        assert "Year" not in props
+
+    def test_year_absent_when_scholar_has_no_year(self):
+        props = notion_helper._build_db_properties(VALID_DATA, scholar={"venue": "X"})
+        assert "Year" not in props
+
+    def test_venue_from_scholar(self):
+        scholar = {"venue": "NeurIPS", "year": None}
+        props = notion_helper._build_db_properties(VALID_DATA, scholar=scholar)
         assert props["Venue"]["rich_text"][0]["text"]["content"] == "NeurIPS"
 
-    def test_venue_none(self):
-        data = {**VALID_DATA, "venue": None}
-        props = notion_helper._build_db_properties(data)
+    def test_venue_empty_when_no_scholar(self):
+        props = notion_helper._build_db_properties(VALID_DATA, scholar=None)
         assert props["Venue"]["rich_text"][0]["text"]["content"] == ""
 
 
@@ -134,7 +141,7 @@ class TestBuildDbPropertiesWithScholar:
         "bibtex": "@article{test2024, title={Test}}",
         "authors": ["Alice Smith", "Bob Lee"],
         "venue": "NeurIPS 2024",
-        "fields_of_study": ["Computer Science", "Mathematics"],
+        "year": 2024,
         "pdf_url": "https://example.com/paper.pdf",
     }
 
@@ -154,14 +161,13 @@ class TestBuildDbPropertiesWithScholar:
         )
         assert props["PDF"]["files"][0]["file_upload"]["id"] == "upload-id-123"
 
-    def test_venue_fallback_to_scholar(self):
-        data = {**VALID_DATA, "venue": None}
-        props = notion_helper._build_db_properties(data, scholar=self.SCHOLAR)
+    def test_venue_from_scholar(self):
+        props = notion_helper._build_db_properties(VALID_DATA, scholar=self.SCHOLAR)
         assert props["Venue"]["rich_text"][0]["text"]["content"] == "NeurIPS 2024"
 
-    def test_venue_json_takes_priority(self):
+    def test_year_from_scholar(self):
         props = notion_helper._build_db_properties(VALID_DATA, scholar=self.SCHOLAR)
-        assert props["Venue"]["rich_text"][0]["text"]["content"] == "NeurIPS"
+        assert props["Year"]["number"] == 2024
 
     def test_no_scholar_no_extra_props(self):
         props = notion_helper._build_db_properties(VALID_DATA, scholar=None)
@@ -169,6 +175,7 @@ class TestBuildDbPropertiesWithScholar:
         assert "Authors" not in props
         assert "Field of Study" not in props
         assert "PDF" not in props
+        assert "Year" not in props
 
     def test_no_file_upload_id_no_pdf(self):
         props = notion_helper._build_db_properties(VALID_DATA, scholar=self.SCHOLAR)
@@ -186,7 +193,7 @@ class TestCreateDbEntry:
     def test_passes_scholar_data(self):
         client = MagicMock()
         client.pages.create.return_value = {"id": "page-123"}
-        scholar = {"bibtex": "@article{}", "authors": ["Alice"], "venue": None, "fields_of_study": []}
+        scholar = {"bibtex": "@article{}", "authors": ["Alice"], "venue": None, "year": None}
         notion_helper.create_db_entry(client, "db-abc", VALID_DATA, scholar=scholar)
         call_kwargs = client.pages.create.call_args[1]
         assert "BibTeX" in call_kwargs["properties"]

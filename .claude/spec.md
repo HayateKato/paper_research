@@ -58,8 +58,8 @@ output.txt を results/{タイムスタンプ}.txt に移動（二重登録防�
 | Tasks | multi_select | JSON | `tasks` |
 | Method | multi_select | JSON | `method` |
 | Data | multi_select | JSON | `data_domains` |
-| Year | number | JSON | `year` |
-| Venue | rich_text | JSON → Semantic Scholar 補完 | `venue`（null 時は scholar_data の `venue`） |
+| Year | number | scholar_data.json | `year` |
+| Venue | rich_text | scholar_data.json | `venue` |
 | BibTeX | rich_text | scholar_data.json | `bibtex` |
 | Authors | multi_select | scholar_data.json | `authors` |
 | PDF | files | Notion Files API | paper.pdf をアップロード |
@@ -118,8 +118,6 @@ DB エントリのページ本文に、以下の Notion ブロック構成で1�
   "tasks": ["タスク（例: Inductive リンク予測, ノード分類）"],
   "method": ["アプローチの大分類（例: クラスタリング, RAG）"],
   "data_domains": ["データ種別（例: 特許, SNS）"],
-  "year": 2024,
-  "venue": "会議・ジャーナル名（不明な場合は null）",
   "page": {
     "purpose": {
       "issue": "問題の説明",

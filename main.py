@@ -17,7 +17,7 @@ RESULTS_DIR = Path("results")
 SCHOLAR_DATA_FILE = Path("scholar_data.json")
 PDF_FILE = Path("paper.pdf")
 
-REQUIRED_KEYS = {"title", "tasks", "method", "data_domains", "year", "venue", "page"}
+REQUIRED_KEYS = {"title", "tasks", "method", "data_domains", "page"}
 
 
 def load_output() -> dict:

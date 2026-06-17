@@ -127,7 +127,8 @@ def _build_db_properties(
     Returns:
         Notion API に渡すプロパティ辞書
     """
-    venue = data["venue"] or (scholar.get("venue") if scholar else None) or ""
+    venue = (scholar.get("venue") if scholar else None) or ""
+    year = scholar.get("year") if scholar else None
 
     props: dict = {
         "Title": {"title": [{"text": {"content": data["title"]}}]},
@@ -135,9 +136,11 @@ def _build_db_properties(
         "Tasks": {"multi_select": [{"name": t} for t in data["tasks"]]},
         "Method": {"multi_select": [{"name": m} for m in data["method"]]},
         "Data": {"multi_select": [{"name": d} for d in data["data_domains"]]},
-        "Year": {"number": data["year"]},
         "Venue": {"rich_text": [{"text": {"content": venue}}]},
     }
+
+    if year is not None:
+        props["Year"] = {"number": year}
 
     if scholar:
         bibtex = scholar.get("bibtex") or ""
