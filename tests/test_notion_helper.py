@@ -129,6 +129,57 @@ class TestBuildPageBlocks:
         assert any("なし" in t for t in paras)
 
 
+class TestBuildDbPropertiesWithScholar:
+    SCHOLAR = {
+        "bibtex": "@article{test2024, title={Test}}",
+        "authors": ["Alice Smith", "Bob Lee"],
+        "venue": "NeurIPS 2024",
+        "fields_of_study": ["Computer Science", "Mathematics"],
+        "pdf_url": "https://example.com/paper.pdf",
+    }
+
+    def test_bibtex_added(self):
+        props = notion_helper._build_db_properties(VALID_DATA, scholar=self.SCHOLAR)
+        assert props["BibTeX"]["rich_text"][0]["text"]["content"] == self.SCHOLAR["bibtex"]
+
+    def test_authors_multi_select(self):
+        props = notion_helper._build_db_properties(VALID_DATA, scholar=self.SCHOLAR)
+        names = [o["name"] for o in props["Authors"]["multi_select"]]
+        assert "Alice Smith" in names
+        assert "Bob Lee" in names
+
+    def test_fields_of_study_multi_select(self):
+        props = notion_helper._build_db_properties(VALID_DATA, scholar=self.SCHOLAR)
+        names = [o["name"] for o in props["Field of Study"]["multi_select"]]
+        assert "Computer Science" in names
+
+    def test_pdf_file_upload(self):
+        props = notion_helper._build_db_properties(
+            VALID_DATA, scholar=self.SCHOLAR, file_upload_id="upload-id-123"
+        )
+        assert props["PDF"]["files"][0]["file_upload"]["id"] == "upload-id-123"
+
+    def test_venue_fallback_to_scholar(self):
+        data = {**VALID_DATA, "venue": None}
+        props = notion_helper._build_db_properties(data, scholar=self.SCHOLAR)
+        assert props["Venue"]["rich_text"][0]["text"]["content"] == "NeurIPS 2024"
+
+    def test_venue_json_takes_priority(self):
+        props = notion_helper._build_db_properties(VALID_DATA, scholar=self.SCHOLAR)
+        assert props["Venue"]["rich_text"][0]["text"]["content"] == "NeurIPS"
+
+    def test_no_scholar_no_extra_props(self):
+        props = notion_helper._build_db_properties(VALID_DATA, scholar=None)
+        assert "BibTeX" not in props
+        assert "Authors" not in props
+        assert "Field of Study" not in props
+        assert "PDF" not in props
+
+    def test_no_file_upload_id_no_pdf(self):
+        props = notion_helper._build_db_properties(VALID_DATA, scholar=self.SCHOLAR)
+        assert "PDF" not in props
+
+
 class TestCreateDbEntry:
     def test_calls_api_and_returns_id(self):
         client = MagicMock()
@@ -136,6 +187,14 @@ class TestCreateDbEntry:
         page_id = notion_helper.create_db_entry(client, "db-abc", VALID_DATA)
         assert page_id == "page-123"
         client.pages.create.assert_called_once()
+
+    def test_passes_scholar_data(self):
+        client = MagicMock()
+        client.pages.create.return_value = {"id": "page-123"}
+        scholar = {"bibtex": "@article{}", "authors": ["Alice"], "venue": None, "fields_of_study": []}
+        notion_helper.create_db_entry(client, "db-abc", VALID_DATA, scholar=scholar)
+        call_kwargs = client.pages.create.call_args[1]
+        assert "BibTeX" in call_kwargs["properties"]
 
 
 class TestCreatePageBody:

@@ -77,3 +77,34 @@ class TestArchiveOutput:
         assert (tmp_path / "output.txt").exists()
         archived = list((tmp_path / "results").glob("*.txt"))
         assert len(archived) == 1
+
+
+class TestLoadScholarData:
+    SCHOLAR_DATA = {
+        "Test Paper": {
+            "bibtex": "@article{test}",
+            "authors": ["Alice"],
+            "venue": "NeurIPS",
+            "fields_of_study": ["CS"],
+            "pdf_url": "https://example.com/paper.pdf",
+        }
+    }
+
+    def test_returns_data_for_title(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "scholar_data.json").write_text(
+            json.dumps(self.SCHOLAR_DATA), encoding="utf-8"
+        )
+        result = main.load_scholar_data("Test Paper")
+        assert result["bibtex"] == "@article{test}"
+
+    def test_returns_none_when_title_missing(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "scholar_data.json").write_text(
+            json.dumps(self.SCHOLAR_DATA), encoding="utf-8"
+        )
+        assert main.load_scholar_data("Unknown Paper") is None
+
+    def test_returns_none_when_file_missing(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        assert main.load_scholar_data("Test Paper") is None
