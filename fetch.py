@@ -47,6 +47,22 @@ def main() -> None:
     load_dotenv()
     title = sys.argv[1]
     api_key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
+
+    scholar_data = load_scholar_data()
+    if title in scholar_data:
+        print(f"キャッシュ済み: {title}（API スキップ）")
+        cached = scholar_data[title]
+        pdf_url = cached.get("pdf_url")
+        if pdf_url and not Path(PDF_FILE).exists():
+            print(f"PDF を再ダウンロード中: {pdf_url}")
+            helper = ScholarHelper(api_key=api_key)
+            success = helper.download_pdf(pdf_url, dest=PDF_FILE)
+            if success:
+                print(f"PDF を {PDF_FILE} に保存しました。")
+            else:
+                print("警告: PDF のダウンロードに失敗しました。")
+        return
+
     helper = ScholarHelper(api_key=api_key)
 
     print(f"Semantic Scholar で検索中: {title}")
