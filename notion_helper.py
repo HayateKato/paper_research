@@ -23,30 +23,28 @@ def upload_pdf(api_key: str, pdf_path: str) -> str | None:
     if not path.exists():
         return None
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Notion-Version": "2022-06-28",
-        "Content-Type": "application/json",
-    }
+    notion_version = "2022-06-28"
 
     resp = requests.post(
         "https://api.notion.com/v1/file_uploads",
-        headers=headers,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Notion-Version": notion_version,
+            "Content-Type": "application/json",
+        },
         json={"name": path.name},
     )
     resp.raise_for_status()
     upload_data = resp.json()
     file_upload_id = upload_data["id"]
-    upload_url = upload_data["upload_url"]
 
-    upload_headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Notion-Version": "2022-06-28",
-    }
     with open(path, "rb") as f:
-        upload_resp = requests.put(
-            upload_url,
-            headers=upload_headers,
+        upload_resp = requests.post(
+            f"https://api.notion.com/v1/file_uploads/{file_upload_id}/send",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Notion-Version": notion_version,
+            },
             files={"file": (path.name, f, "application/pdf")},
         )
     upload_resp.raise_for_status()
