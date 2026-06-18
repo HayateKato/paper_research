@@ -17,34 +17,74 @@ pip install -r requirements.txt
 # .env に API キーを設定（初回のみ）
 cp .env.example .env
 
-# output.json に NotebookLM の出力を貼り付けた後に実行
+# テスト実行
+pytest tests/
+
+# 単一テストファイルの実行
+pytest tests/test_main.py
+
+# 手動フロー（2ステップ）
+python fetch.py "論文タイトル"   # Semantic Scholar から取得
+# → paper.pdf を NotebookLM に渡して JSON を output.txt に貼り付け
 python main.py
+
+# 一括フロー（対話型）
+python pipeline.py "論文タイトル"  # fetch → Notion 初期登録 → 入力待ち → 補完
 ```
 
 ## アーキテクチャ
 
+2 つのワークフローがある。
+
+### 手動フロー
+
 ```
-NotebookLM (prompts/notebooklm.md + 論文 PDF)
-  → output.json に JSON を貼り付け
-  → python main.py
-      → output.json を読み込み・バリデーション
-      → Notion DB に新規エントリ作成（Title, Status, Tasks, Method, Data, Year, Venue）
-      → Notion ページ本文に論文整理を書き込み
-      → output.json を results/{タイムスタンプ}.json に移動
+python fetch.py "論文タイトル"
+  → Semantic Scholar からメタデータ・PDF 取得
+  → scholar_data.json に保存（キャッシュ）
+  → paper.pdf をダウンロード
+
+（paper.pdf を NotebookLM で解析して JSON を output.txt に貼り付け）
+
+python main.py
+  → output.txt を読み込み・バリデーション
+  → scholar_data.json からメタデータ取得
+  → paper.pdf を Notion にアップロード（PDF URL がある場合のみ）
+  → Notion DB に新規エントリ作成（Title, Status, Tasks, Method, Data, Year, Venue, BibTeX, Authors, PDF）
+  → Notion ページ本文に論文整理を書き込み
+  → output.txt を results/{タイムスタンプ}.txt にコピー
+```
+
+### 一括フロー（pipeline.py）
+
+```
+python pipeline.py "論文タイトル"
+  → fetch.py を subprocess で実行（Semantic Scholar 取得）
+  → Notion に初期エントリを作成（Status: 処理中）
+  → output.txt への入力を待機（Enter 待ち）
+  → output.txt を読み込んで Tasks/Method/Data を補完
+  → ページ本文を書き込み
+  → Status を "完了" に更新
 ```
 
 主要ファイル：
-- `main.py` — エントリーポイント。output.json の読み込みから Notion 書き込みまでを統括
-- `notion_helper.py` — Notion API ラッパー
+- `main.py` — 手動フローのエントリーポイント
+- `pipeline.py` — 一括フローのエントリーポイント
+- `fetch.py` — Semantic Scholar から論文メタデータ・PDF を取得
+- `notion_helper.py` — Notion API ラッパー（DB エントリ作成・ページ本文書き込み・PDF アップロード）
+- `scholar_helper.py` — Semantic Scholar API ラッパー（検索・BibTeX 解析・PDF ダウンロード）
 - `prompts/notebooklm.md` — NotebookLM に投げるプロンプト（JSON フォーマットを指定）
 - `.claude/spec.md` — 詳細仕様書（Notion スキーマ・ページブロック構成・エラー処理の定義）
 
 ## git 管理外ファイル
 
-- `output.json` — NotebookLM からの出力を貼り付けるファイル
-- `results/` — 処理済み JSON のバックアップ
-- `.env` — API キー（`NOTION_API_KEY`, `NOTION_DATABASE_ID`）
+- `output.txt` — NotebookLM からの出力を貼り付けるファイル
+- `paper.pdf` — 処理対象の PDF（fetch.py でダウンロード、処理後は削除不要）
+- `results/` — 処理済み output.txt のバックアップ
+- `.env` — API キー（`NOTION_API_KEY`, `NOTION_DATABASE_ID`, `SEMANTIC_SCHOLAR_API_KEY`）
 - `.venv/`, `tmp/`
+
+`scholar_data.json` は git 管理内のキャッシュファイル。タイトルをキーに BibTeX・Authors・Venue・Year・PDF URL を蓄積する。
 
 ## 実装時の参照先
 
