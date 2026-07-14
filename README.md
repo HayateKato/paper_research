@@ -1,17 +1,14 @@
 # paper_research
 
-修士研究のための論文調査・管理リポジトリ。NotebookLM で論文を解析した JSON を Notion DB に自動登録するパイプライン。
+修士研究のための論文調査・管理リポジトリ。Semantic Scholar から論文メタデータ・PDFを取得し、Notion DBに自動登録するパイプライン。NotebookLMで解析したJSONをページ本文に書き込む機能もオプションで利用できる。
 
 ## 概要
 
 ```
-NotebookLM (prompts/notebooklm.md + 論文 PDF)
-  → output.json に JSON を貼り付け
-  → python main.py
-      → output.json を読み込み・バリデーション
-      → Notion DB に新規エントリ作成
-      → Notion ページ本文に論文整理を書き込み
-      → output.json を results/{タイムスタンプ}.json に移動
+python pipeline.py "論文タイトル1" ["論文タイトル2" ...] [--with-summary]
+  → fetch.py で Semantic Scholar からメタデータ・PDF・DOI を取得
+  → Notion DB に新規エントリを作成（Status: 処理中 → 完了）
+  → --with-summary 指定時のみ、summary/ に貼り付けた NotebookLM JSON をページ本文へ書き込み
 ```
 
 ## セットアップ
@@ -22,7 +19,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# .env に Notion API キーを記入
+# .env に Notion / Semantic Scholar API キーを記入
 ```
 
 ### 環境変数（`.env`）
@@ -30,29 +27,42 @@ cp .env.example .env
 ```
 NOTION_API_KEY=...
 NOTION_DATABASE_ID=...
+SEMANTIC_SCHOLAR_API_KEY=...
 ```
 
 ## 使い方
 
-1. `prompts/notebooklm.md` のプロンプトと論文 PDF を NotebookLM に投げる
-2. 返ってきた JSON を `output.json` に貼り付けて保存
-3. 実行する
+### メタデータのみ一括登録
 
 ```bash
-python main.py
+python pipeline.py "論文タイトル1" "論文タイトル2"
 ```
+
+### NotebookLM要約も書き込む場合
+
+```bash
+python pipeline.py "論文タイトル1" "論文タイトル2" --with-summary
+```
+
+1. `prompts/notebooklm.md` のプロンプトと各論文の PDF（`pdfs/` 配下）を NotebookLM に投げる
+2. 返ってきた JSON を対応する `summary/{タイトル}.txt` に貼り付ける
+3. 全ファイルへの入力が終わったら Enter を押す
 
 ## Notion DB スキーマ
 
 | カラム | 型 | 内容 |
 |---|---|---|
 | Title | title | 論文タイトル |
-| Status | select | Done / Error |
-| Tasks | multi_select | タスク種別 |
-| Method | multi_select | 手法の大分類 |
-| Data | multi_select | データ種別 |
+| Status | status | 処理中 / 完了 / エラー |
+| purpose | multi_select | 常に空欄（手動タグ付け） |
+| Data | multi_select | 常に空欄（手動タグ付け） |
+| github | url | 常に空欄（手動入力） |
+| DOI | url | Semantic Scholar から取得 |
+| Authors | multi_select | 著者名 |
 | Year | number | 発表年 |
 | Venue | rich_text | 会議・ジャーナル名 |
+| BibTeX | rich_text | BibTeX 文字列 |
+| PDF | files | ダウンロードした PDF |
 
 ## ファイル構成
 
@@ -60,10 +70,14 @@ python main.py
 paper_research/
 ├── .env                    # API キー（git 管理外）
 ├── .env.example
-├── output.json             # NotebookLM の出力を貼り付けるファイル（git 管理外）
-├── results/                # 処理済み JSON のバックアップ（git 管理外）
-├── main.py                 # エントリーポイント
+├── scholar_data.json       # Semantic Scholar 取得データの蓄積
+├── pdfs/                   # ダウンロードした PDF（git 管理外）
+├── summary/                # --with-summary 指定時の NotebookLM JSON 貼り付け先（git 管理外）
+├── pipeline.py             # エントリーポイント
+├── utils.py                # 共通ユーティリティ（ファイル名サニタイズ等）
+├── fetch.py                # Semantic Scholar 取得スクリプト
 ├── notion_helper.py        # Notion API ラッパー
+├── scholar_helper.py       # Semantic Scholar API ラッパー
 ├── tests/                  # pytest テスト
 ├── prompts/
 │   └── notebooklm.md       # NotebookLM に投げるプロンプト

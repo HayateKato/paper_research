@@ -2,71 +2,84 @@
 
 ## 概要
 
-NotebookLM で論文を解析した JSON 出力を `output.txt` に貼り付けて `python main.py` を実行するだけで、Notion DB エントリとページ本文を自動作成する。Claude API は使用しない。
+`python pipeline.py "論文タイトル" ["論文タイトル2" ...] [--with-summary]` を実行するだけで、Semantic Scholar からのメタデータ・PDF取得とNotion DBエントリ作成を自動で行う。複数タイトルを一度に指定して一括登録できる。`--with-summary` を付けた場合のみ、NotebookLMで解析したJSONをページ本文に書き込む（従来の詳細な論文整理フロー）。Claude API は使用しない。
 
 ---
 
 ## ユーザーの作業手順
 
-1. `python fetch.py "論文タイトル"` を実行（Semantic Scholar から PDF・メタデータを取得）
-2. ダウンロードされた `paper.pdf` を NotebookLM に渡し、JSON を取得
-3. 返ってきた JSON を `output.txt` に貼り付けて保存
-4. `python main.py` を実行
+### 基本（メタデータのみ登録）
+
+```bash
+python pipeline.py "論文タイトル1" "論文タイトル2" "論文タイトル3"
+```
+
+Semantic Scholar からBibTeX・著者・venue・year・DOI・PDFを取得し、Notion DBに新規エントリを作成する。ページ本文は書き込まない。
+
+### NotebookLM要約も書き込む場合
+
+```bash
+python pipeline.py "論文タイトル1" "論文タイトル2" --with-summary
+```
+
+1. 各論文のメタデータ取得・PDF取得・Notion初期エントリ作成（Status: 処理中）を行う。
+2. `summary/{サニタイズ済みタイトル}.txt` が論文ごとに用意されるので、各PDFをNotebookLMに渡し、返ってきたJSONを対応するファイルに貼り付ける。
+3. 全ファイルへの入力が終わったらEnterを押す。
+4. スクリプトが各 `summary/*.txt` を読み込み、ページ本文書き込みとStatus更新（完了 / エラー）を行う。
 
 ---
 
 ## 実行フロー
 
-### fetch.py（1回目）
+### pipeline.py
 
 ```
-python fetch.py "論文タイトル"
+python pipeline.py "title1" ["title2" ...] [--with-summary]
   ↓
-Semantic Scholar /paper/search/match でタイトル検索（1回のAPIコール）
-  → レスポンスのタイトルと入力タイトルを照合してバリデーション
-  → BibTeX から著者名・Venue・Year を解析
-  → PDF URL 取得 → paper.pdf をダウンロード
+[1] fetch.py をタイトルリストまとめて subprocess 実行
+  → Semantic Scholar /paper/search/match でタイトルごとに検索
+  → BibTeX から著者名・Venue・Year を解析、externalIds から DOI を取得
+  → PDF URL 取得 → pdfs/{サニタイズ済みタイトル}.pdf をダウンロード
   → scholar_data.json に { "論文タイトル": {...} } を upsert（蓄積）
-```
-
-### main.py（2回目）
-
-```
-python main.py
+  → 1件が失敗（ヒットなし・APIエラー等）してもスキップして残りを継続
   ↓
-output.txt を読み込んで JSON をパース・バリデーション
+[2] タイトルごとに Notion 初期エントリを作成（Status: 処理中）
+  → PDF が取得できていれば Notion Files API でアップロード
+  → 1件の失敗が他のタイトルの処理を止めない
   ↓
-scholar_data.json から output.txt の title をキーで取得（存在する場合）
+[3-A] --with-summary 未指定の場合
+  → 各エントリの Status を即座に "完了" に更新して終了
   ↓
-paper.pdf が存在する場合は Notion Files API でアップロード
-  ↓
-Notion DB に新規エントリを作成（プロパティ設定）
-  ↓
-Notion ページ本文に論文整理を書き込み
-  ↓
-output.txt を results/{タイムスタンプ}.txt に移動（二重登録防止・バックアップ）
+[3-B] --with-summary 指定の場合
+  → summary/{サニタイズ済みタイトル}.txt を論文ごとに用意
+  → 全ファイルへの入力を1回だけ待機（Enter待ち）
+  → 各 summary/*.txt を読み込み、ページ本文を書き込み
+  → 成功したタイトルは Status を "完了"、失敗したタイトルのみ "エラー" に更新
 ```
 
 ---
 
 ## Notion DB スキーマ
 
-| カラム名 | 型 | 取得元 | JSON キー / ソース |
+| カラム名 | 型 | 取得元 | 備考 |
 |---|---|---|---|
-| Title | title | JSON | `title` |
-| Status | status | スクリプト | 完了 / エラー |
-| Tasks | multi_select | JSON | `tasks` |
-| Method | multi_select | JSON | `method` |
-| Data | multi_select | JSON | `data_domains` |
-| Year | number | scholar_data.json | `year` |
-| Venue | rich_text | scholar_data.json | `venue` |
-| BibTeX | rich_text | scholar_data.json | `bibtex` |
-| Authors | multi_select | scholar_data.json | `authors` |
-| PDF | files | Notion Files API | paper.pdf をアップロード |
+| Title | title | CLI引数のタイトル | |
+| Status | status | スクリプト | 処理中 / 完了 / エラー |
+| purpose | multi_select | なし | 常に空欄。ユーザーがNotion上で手動タグ付け |
+| Data | multi_select | なし | 常に空欄。ユーザーがNotion上で手動タグ付け |
+| github | url | なし | 常に空欄。ユーザーがNotion上で手動入力 |
+| DOI | url | scholar_data.json の `doi` | Semantic Scholar externalIds.DOI |
+| Authors | multi_select | scholar_data.json の `authors` | |
+| Year | number | scholar_data.json の `year` | |
+| Venue | rich_text | scholar_data.json の `venue` | |
+| BibTeX | rich_text | scholar_data.json の `bibtex` | |
+| PDF | files | Notion Files API | ファイル名は `{サニタイズ済みタイトル}.pdf` |
+
+**注意:** Tasks・Method プロパティは廃止した。NotebookLM出力の `tasks`/`method`/`data_domains` はNotionのDBプロパティには一切書き込まれない（`--with-summary` 時もページ本文にのみ反映される）。
 
 ---
 
-## Notion ページ本文
+## Notion ページ本文（`--with-summary` 指定時のみ書き込み）
 
 DB エントリのページ本文に、以下の Notion ブロック構成で1ページにまとめて書き込む。
 
@@ -108,9 +121,9 @@ DB エントリのページ本文に、以下の Notion ブロック構成で1�
 
 ---
 
-## 入力 JSON フォーマット（`output.txt`）
+## 入力 JSON フォーマット（`summary/{タイトル}.txt`、`--with-summary` 指定時のみ使用）
 
-`prompts/notebooklm.md` の出力形式に準拠。
+`prompts/notebooklm.md` の出力形式に準拠。必須キーは `title`, `page` の2つのみ（`tasks`/`method`/`data_domains` は出力されても無視する）。
 
 ```json
 {
@@ -165,12 +178,14 @@ DB エントリのページ本文に、以下の Notion ブロック構成で1�
     "authors": ["Author A", "Author B"],
     "venue": "ICLR 2024",
     "year": 2024,
-    "pdf_url": "https://..."
+    "doi": "10.1145/xxxxxxx",
+    "pdf_url": "https://...",
+    "pdf_path": "pdfs/論文タイトルA.pdf"
   }
 }
 ```
 
-fetch.py 実行ごとにタイトルキーで upsert する。
+fetch.py 実行ごとにタイトルキーで upsert する。`doi`/`pdf_path` は取得・保存できなかった場合 `null` になる。
 
 ---
 
@@ -180,12 +195,13 @@ fetch.py 実行ごとにタイトルキーで upsert する。
 paper_research/
 ├── .env                    # API キー（git 管理外）
 ├── .env.example
-├── output.txt              # NotebookLM の出力を貼り付けるファイル（git 管理外）
 ├── scholar_data.json       # Semantic Scholar 取得データの蓄積（git 管理外）
-├── paper.pdf               # 直近のダウンロード PDF（git 管理外）
-├── results/                # 処理済みファイルのバックアップ（git 管理外）
-├── main.py                 # エントリーポイント（2回目に実行）
-├── fetch.py                # Semantic Scholar 取得スクリプト（1回目に実行）
+├── pdfs/                   # ダウンロードしたPDF（{タイトル}.pdf、git 管理外）
+├── summary/                # --with-summary 指定時の NotebookLM JSON 貼り付け先（git 管理外）
+├── results/                # （廃止予定。旧手動フローのバックアップ用ディレクトリ）
+├── pipeline.py             # エントリーポイント
+├── utils.py                # ファイル名サニタイズ等の共通ユーティリティ
+├── fetch.py                # Semantic Scholar 取得スクリプト（pipeline.py から subprocess 実行）
 ├── scholar_helper.py       # Semantic Scholar API ラッパー
 ├── notion_helper.py        # Notion API ラッパー
 ├── prompts/
@@ -200,6 +216,7 @@ paper_research/
 ```
 NOTION_API_KEY=...
 NOTION_DATABASE_ID=...
+SEMANTIC_SCHOLAR_API_KEY=...
 ```
 
 ---
@@ -220,24 +237,22 @@ requests
 
 | エラーケース | 対応 |
 |---|---|
-| Semantic Scholar でヒットなし | エラーメッセージを出力して終了（scholar_data.json を更新しない） |
-| Semantic Scholar API エラー | エラーメッセージを出力して終了 |
+| Semantic Scholar でヒットなし | 該当タイトルのみスキップし、警告を出力して次のタイトルへ継続 |
+| Semantic Scholar API エラー | 該当タイトルのみスキップし、警告を出力して次のタイトルへ継続 |
 | PDF URL が存在しない（非 OA） | 警告を出力し、その他フィールドのみ scholar_data.json に保存 |
-| PDF ダウンロード失敗 | 警告を出力し、pdf_url のみ scholar_data.json に保存（paper.pdf は作成しない） |
+| PDF ダウンロード失敗 | 警告を出力し、pdf_url のみ scholar_data.json に保存（pdf_path は null） |
+| 全タイトル中1件以上が失敗 | 失敗したタイトル一覧を表示し、プロセスは非0で終了するが、成功分は scholar_data.json に保存済み |
 
-### main.py 側
+### pipeline.py 側
 
 | エラーケース | 対応 |
 |---|---|
-| `output.txt` が存在しない | エラーメッセージを出力して終了 |
-| JSON パース失敗 | エラーメッセージを出力して終了（results/ に移動しない） |
-| 必須キー欠落 | エラーメッセージを出力して終了（results/ に移動しない） |
-| scholar_data.json が存在しない | スキップ（BibTeX 等なしで Notion 登録を続行） |
-| title が scholar_data.json に未登録 | スキップ（BibTeX 等なしで Notion 登録を続行） |
-| paper.pdf が存在しない | PDF カラムを空にして続行 |
+| NOTION_API_KEY / NOTION_DATABASE_ID 未設定 | エラーメッセージを出力して終了 |
+| fetch.py の実行で1件以上失敗 | 失敗したタイトルはNotion登録もスキップし、成功したタイトルのみ処理を継続 |
 | Notion Files API エラー | 警告を出力し、PDF なしで続行 |
-| Notion DB 書き込みエラー | エラーメッセージを出力して終了（results/ に移動しない） |
-| Notion ページ書き込みエラー | ログ出力のみ（DB エントリは作成済みのため results/ に移動する） |
+| Notion DB 書き込みエラー | 該当タイトルのみエラーとして記録し、残りのタイトルは処理を継続 |
+| `summary/{タイトル}.txt` が存在しない・空・JSON不正（--with-summary時） | 該当タイトルのみ Status を "エラー" に更新し、残りのタイトルは処理を継続 |
+| ページ本文書き込みエラー（--with-summary時） | 該当タイトルの Status を "エラー" に更新し、残りのタイトルは処理を継続 |
 
 ---
 
@@ -258,11 +273,11 @@ pip install -r requirements.txt
 
 # 環境変数の設定
 cp .env.example .env
-# .env に Notion API キーを記入
+# .env に Notion / Semantic Scholar API キーを記入
 
-# 1回目: PDF 取得
-python fetch.py "論文タイトル"
+# メタデータのみ一括登録
+python pipeline.py "論文タイトル1" "論文タイトル2"
 
-# 2回目: output.txt に NotebookLM の出力を貼り付けた後に実行
-python main.py
+# NotebookLM要約も書き込む場合
+python pipeline.py "論文タイトル1" "論文タイトル2" --with-summary
 ```
