@@ -5,6 +5,8 @@ from pathlib import Path
 import requests
 from notion_client import Client
 
+from utils import sanitize_filename
+
 
 def upload_pdf(api_key: str, pdf_path: str) -> str | None:
     """PDF を Notion Files API でアップロードして file_upload_id を返す。
@@ -66,97 +68,25 @@ def update_page_status(client: Client, page_id: str, status: str) -> None:
     )
 
 
-def create_initial_db_entry(
-    client: Client,
-    database_id: str,
-    title: str,
-    scholar: dict | None = None,
-    file_upload_id: str | None = None,
-) -> str:
-    """Scholar データのみで Notion DB に初期エントリを作成してページ ID を返す。
-
-    Tasks/Method/Data は設定しない。Status は "処理中" にする。
-
-    Args:
-        client: Notion クライアント
-        database_id: 書き込み先 DB の ID
-        title: 論文タイトル
-        scholar: scholar_data.json から取得した論文データ
-        file_upload_id: Notion Files API でアップロードした PDF の ID
-
-    Returns:
-        作成したページの ID
-    """
-    venue = (scholar.get("venue") if scholar else None) or ""
-    year = scholar.get("year") if scholar else None
-
-    props: dict = {
-        "Title": {"title": [{"text": {"content": title}}]},
-        "Status": {"status": {"name": "処理中"}},
-        "Venue": {"rich_text": [{"text": {"content": venue}}]},
-    }
-
-    if year is not None:
-        props["Year"] = {"number": year}
-
-    if scholar:
-        bibtex = scholar.get("bibtex") or ""
-        if bibtex:
-            props["BibTeX"] = {"rich_text": [{"text": {"content": bibtex}}]}
-        authors = scholar.get("authors") or []
-        if authors:
-            props["Authors"] = {"multi_select": [{"name": a} for a in authors]}
-
-    if file_upload_id:
-        props["PDF"] = {
-            "files": [
-                {
-                    "type": "file_upload",
-                    "file_upload": {"id": file_upload_id},
-                    "name": "paper.pdf",
-                }
-            ]
-        }
-
-    response = client.pages.create(
-        parent={"database_id": database_id},
-        properties=props,
-    )
-    return response["id"]
-
-
-def update_db_entry_properties(client: Client, page_id: str, data: dict) -> None:
-    """既存ページに Tasks, Method, Data プロパティを追記する。
-
-    Args:
-        client: Notion クライアント
-        page_id: 更新対象ページの ID
-        data: output の NotebookLM データ（tasks, method, data_domains を含む）
-    """
-    client.pages.update(
-        page_id=page_id,
-        properties={
-            "Tasks": {"multi_select": [{"name": t} for t in data["tasks"]]},
-            "Method": {"multi_select": [{"name": m} for m in data["method"]]},
-            "Data": {"multi_select": [{"name": d} for d in data["data_domains"]]},
-        },
-    )
-
-
 def create_db_entry(
     client: Client,
     database_id: str,
-    data: dict,
+    title: str,
+    status: str = "処理中",
     scholar: dict | None = None,
     file_upload_id: str | None = None,
 ) -> str:
     """Notion DB に新規エントリを作成してページ ID を返す。
 
+    purpose / Data / github プロパティはスクリプトからは一切設定しない
+    （常に空欄とし、ユーザーが Notion 上で手動タグ付けする想定）。
+
     Args:
         client: Notion クライアント
         database_id: 書き込み先 DB の ID
-        data: output.txt のトップレベル辞書
-        scholar: scholar_data.json から取得した論文データ（BibTeX・Authors 等）
+        title: 論文タイトル
+        status: 設定するステータス名（例: "処理中", "完了"）
+        scholar: scholar_data.json から取得した論文データ（bibtex/authors/venue/year/doi）
         file_upload_id: Notion Files API でアップロードした PDF の ID
 
     Returns:
@@ -167,7 +97,9 @@ def create_db_entry(
     """
     response = client.pages.create(
         parent={"database_id": database_id},
-        properties=_build_db_properties(data, scholar=scholar, file_upload_id=file_upload_id),
+        properties=_build_db_properties(
+            title, status, scholar=scholar, file_upload_id=file_upload_id
+        ),
     )
     return response["id"]
 
@@ -178,7 +110,7 @@ def create_page_body(client: Client, page_id: str, data: dict) -> None:
     Args:
         client: Notion クライアント
         page_id: 書き込み先ページの ID
-        data: output.json のトップレベル辞書（page キーを含む）
+        data: NotebookLM の出力の辞書（page キーを含む）
 
     Raises:
         notion_client.errors.APIResponseError: Notion API エラー時
@@ -188,14 +120,16 @@ def create_page_body(client: Client, page_id: str, data: dict) -> None:
 
 
 def _build_db_properties(
-    data: dict,
+    title: str,
+    status: str,
     scholar: dict | None = None,
     file_upload_id: str | None = None,
 ) -> dict:
     """DB エントリのプロパティ辞書を構築する。
 
     Args:
-        data: output.txt のトップレベル辞書
+        title: 論文タイトル
+        status: 設定するステータス名
         scholar: scholar_data.json から取得した論文データ
         file_upload_id: Notion Files API でアップロードした PDF の ID
 
@@ -206,11 +140,8 @@ def _build_db_properties(
     year = scholar.get("year") if scholar else None
 
     props: dict = {
-        "Title": {"title": [{"text": {"content": data["title"]}}]},
-        "Status": {"status": {"name": "完了"}},
-        "Tasks": {"multi_select": [{"name": t} for t in data["tasks"]]},
-        "Method": {"multi_select": [{"name": m} for m in data["method"]]},
-        "Data": {"multi_select": [{"name": d} for d in data["data_domains"]]},
+        "Title": {"title": [{"text": {"content": title}}]},
+        "Status": {"status": {"name": status}},
         "Venue": {"rich_text": [{"text": {"content": venue}}]},
     }
 
@@ -226,13 +157,17 @@ def _build_db_properties(
         if authors:
             props["Authors"] = {"multi_select": [{"name": a} for a in authors]}
 
+        doi = scholar.get("doi")
+        if doi:
+            props["DOI"] = {"url": doi}
+
     if file_upload_id:
         props["PDF"] = {
             "files": [
                 {
                     "type": "file_upload",
                     "file_upload": {"id": file_upload_id},
-                    "name": "paper.pdf",
+                    "name": f"{sanitize_filename(title)}.pdf",
                 }
             ]
         }
