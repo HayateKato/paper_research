@@ -6,4 +6,5 @@ __pycache__/
 results/
 output.txt
 scholar_data.json
-paper.pdf
+pdfs/
+summary/
