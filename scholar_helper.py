@@ -10,7 +10,7 @@ class ScholarHelper:
     """Semantic Scholar Graph API のラッパークラス。"""
 
     BASE_URL = "https://api.semanticscholar.org/graph/v1"
-    MATCH_FIELDS = "title,citationStyles,openAccessPdf"
+    MATCH_FIELDS = "title,citationStyles,openAccessPdf,externalIds"
     MAX_RETRIES = 2
 
     def __init__(self, api_key: str | None = None) -> None:
@@ -93,6 +93,20 @@ class ScholarHelper:
         pdf = paper.get("openAccessPdf")
         if pdf and isinstance(pdf, dict):
             return pdf.get("url")
+        return None
+
+    def get_doi(self, paper: dict) -> str | None:
+        """検索結果から DOI を抽出する。
+
+        Args:
+            paper: search_by_title の返り値
+
+        Returns:
+            DOI 文字列（例: "10.1145/xxxx"）。取得できない場合は None。
+        """
+        external_ids = paper.get("externalIds")
+        if external_ids and isinstance(external_ids, dict):
+            return external_ids.get("DOI")
         return None
 
     def _parse_bibtex_field(self, bibtex: str, field: str) -> str | None:

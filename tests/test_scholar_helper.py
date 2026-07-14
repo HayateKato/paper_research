@@ -26,6 +26,7 @@ MATCH_RESPONSE = {
             "title": "Test Paper",
             "openAccessPdf": {"url": "https://example.com/paper.pdf", "status": "GREEN"},
             "citationStyles": {"bibtex": BIBTEX},
+            "externalIds": {"DOI": "10.1145/1234567"},
             "matchScore": 150.0,
         }
     ]
@@ -98,6 +99,14 @@ class TestSearchByTitle:
         args, kwargs = mock_get.call_args
         assert "search/match" in args[0]
         assert kwargs["params"]["query"] == "My Paper"
+
+    def test_requests_external_ids_field(self):
+        helper = ScholarHelper()
+        with patch("scholar_helper.requests.get") as mock_get:
+            mock_get.return_value = self._make_mock_resp(MATCH_RESPONSE)
+            helper.search_by_title("My Paper")
+        _, kwargs = mock_get.call_args
+        assert "externalIds" in kwargs["params"]["fields"]
 
 
 class TestValidateTitle:
@@ -222,6 +231,22 @@ class TestFormatYear:
     def test_returns_none_when_no_bibtex(self):
         helper = ScholarHelper()
         assert helper.format_year({}) is None
+
+
+class TestGetDoi:
+    def test_returns_doi(self):
+        helper = ScholarHelper()
+        paper = MATCH_RESPONSE["data"][0]
+        assert helper.get_doi(paper) == "10.1145/1234567"
+
+    def test_returns_none_when_no_external_ids(self):
+        helper = ScholarHelper()
+        assert helper.get_doi({}) is None
+
+    def test_returns_none_when_no_doi_in_external_ids(self):
+        helper = ScholarHelper()
+        paper = {"externalIds": {"ArXiv": "1234.5678"}}
+        assert helper.get_doi(paper) is None
 
 
 class TestDownloadPdf:
