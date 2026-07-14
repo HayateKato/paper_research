@@ -5,7 +5,7 @@ from pathlib import Path
 import requests
 from notion_client import Client
 
-from utils import sanitize_filename
+from utils import sanitize_filename, shorten_title
 
 
 def upload_pdf(api_key: str, pdf_path: str) -> str | None:
@@ -26,6 +26,7 @@ def upload_pdf(api_key: str, pdf_path: str) -> str | None:
         return None
 
     notion_version = "2022-06-28"
+    short_name = f"{shorten_title(path.stem)}.pdf"
 
     resp = requests.post(
         "https://api.notion.com/v1/file_uploads",
@@ -34,7 +35,7 @@ def upload_pdf(api_key: str, pdf_path: str) -> str | None:
             "Notion-Version": notion_version,
             "Content-Type": "application/json",
         },
-        json={"name": path.name},
+        json={"name": short_name},
     )
     resp.raise_for_status()
     upload_data = resp.json()
@@ -47,7 +48,7 @@ def upload_pdf(api_key: str, pdf_path: str) -> str | None:
                 "Authorization": f"Bearer {api_key}",
                 "Notion-Version": notion_version,
             },
-            files={"file": (path.name, f, "application/pdf")},
+            files={"file": (short_name, f, "application/pdf")},
         )
     upload_resp.raise_for_status()
 
@@ -167,7 +168,7 @@ def _build_db_properties(
                 {
                     "type": "file_upload",
                     "file_upload": {"id": file_upload_id},
-                    "name": f"{sanitize_filename(title)}.pdf",
+                    "name": f"{shorten_title(sanitize_filename(title))}.pdf",
                 }
             ]
         }
