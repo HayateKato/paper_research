@@ -18,13 +18,16 @@ PDF_DIR = Path("pdfs")
 
 
 def load_scholar_data() -> dict:
-    """scholar_data.json を読み込む。ファイルがない場合は空辞書を返す。
+    """scholar_data.json を読み込む。ファイルがない・空の場合は空辞書を返す。
 
     Returns:
         タイトルをキーとした論文データの辞書
     """
     if SCHOLAR_DATA_FILE.exists():
-        return json.loads(SCHOLAR_DATA_FILE.read_text(encoding="utf-8"))
+        text = SCHOLAR_DATA_FILE.read_text(encoding="utf-8").strip()
+        if not text:
+            return {}
+        return json.loads(text)
     return {}
 
 

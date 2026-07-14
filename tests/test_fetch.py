@@ -26,6 +26,26 @@ PAPER = {
 }
 
 
+class TestLoadScholarData:
+    def test_returns_empty_dict_when_file_missing(self, tmp_path, monkeypatch):
+        """ファイルが存在しない場合に空辞書を返すことを確認。"""
+        monkeypatch.chdir(tmp_path)
+        assert fetch.load_scholar_data() == {}
+
+    def test_returns_empty_dict_when_file_empty(self, tmp_path, monkeypatch):
+        """0バイトの空ファイルの場合にJSONDecodeErrorを起こさず空辞書を返すことを確認。"""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "scholar_data.json").write_text("", encoding="utf-8")
+        assert fetch.load_scholar_data() == {}
+
+    def test_returns_parsed_data(self, tmp_path, monkeypatch):
+        """有効なJSONの場合にパース済み辞書を返すことを確認。"""
+        monkeypatch.chdir(tmp_path)
+        data = {"Test Paper": {"bibtex": "@article{x}"}}
+        (tmp_path / "scholar_data.json").write_text(json.dumps(data), encoding="utf-8")
+        assert fetch.load_scholar_data() == data
+
+
 class TestFetchOne:
     def test_new_title_saves_entry(self, tmp_path, monkeypatch):
         """新規タイトルを検索成功した場合にscholar_dataへ保存されることを確認。
