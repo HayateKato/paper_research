@@ -141,3 +141,29 @@ class TestMain:
                 pipeline.main()
 
         assert exc_info.value.code == 1
+
+    def test_status_update_failure_counts_as_failed(self, tmp_path, monkeypatch):
+        """--with-summary未指定時にStatus更新が失敗した場合、failed_titlesに記録されることを確認。"""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("NOTION_API_KEY", "key")
+        monkeypatch.setenv("NOTION_DATABASE_ID", "db")
+        monkeypatch.setattr(sys, "argv", ["pipeline.py", "Good Paper"])
+
+        scholar_data = {
+            "Good Paper": {
+                "bibtex": None, "authors": [], "venue": None, "year": None,
+                "doi": None, "pdf_url": None, "pdf_path": None,
+            }
+        }
+        (tmp_path / "scholar_data.json").write_text(json.dumps(scholar_data), encoding="utf-8")
+
+        mock_client_instance = MagicMock()
+        mock_client_instance.pages.create.return_value = {"id": "page-1"}
+
+        with patch("pipeline.subprocess.run"), \
+             patch("pipeline.Client", return_value=mock_client_instance), \
+             patch("pipeline.update_page_status", side_effect=Exception("update failed")):
+            with pytest.raises(SystemExit) as exc_info:
+                pipeline.main()
+
+        assert exc_info.value.code == 1

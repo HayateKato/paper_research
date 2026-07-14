@@ -177,7 +177,11 @@ def main() -> None:
         sys.exit(1)
 
     print(f"[1/2] Semantic Scholar から {len(args.titles)} 件のタイトルを取得中...")
-    subprocess.run([sys.executable, "fetch.py", *args.titles])
+    fetch_result = subprocess.run([sys.executable, "fetch.py", *args.titles])
+    if fetch_result.returncode != 0:
+        # 失敗タイトルは fetch.py 側で scholar_data.json に書き込まれないため、
+        # 後続の load_scholar_data(title) is None チェックで個別にスキップされる。
+        print("警告: fetch.py で一部タイトルの取得に失敗しました。scholar_data.json に存在しないタイトルはスキップします。")
 
     client = Client(auth=api_key)
 
@@ -206,7 +210,8 @@ def main() -> None:
             try:
                 update_page_status(client, page_id, "完了")
             except Exception as e:
-                print(f"警告: Status の更新に失敗しました。{e}")
+                print(f"エラー: {title} の Status 更新に失敗しました。{e}")
+                failed_titles.append(title)
 
     if args.with_summary and page_ids:
         SUMMARY_DIR.mkdir(exist_ok=True)
