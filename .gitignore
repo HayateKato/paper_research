@@ -8,3 +8,4 @@ output.txt
 scholar_data.json
 pdfs/
 summary/
+.DS_Store
