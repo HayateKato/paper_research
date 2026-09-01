@@ -73,6 +73,8 @@ def create_db_entry(
     client: Client,
     database_id: str,
     title: str,
+    purpose: str = "未定",
+    classification: str = "未定",
     status: str = "処理中",
     scholar: dict | None = None,
     file_upload_id: str | None = None,
@@ -86,6 +88,8 @@ def create_db_entry(
         client: Notion クライアント
         database_id: 書き込み先 DB の ID
         title: 論文タイトル
+        purpose: 研究目的
+        classification: 研究内容の分類
         status: 設定するステータス名（例: "処理中", "完了"）
         scholar: scholar_data.json から取得した論文データ（bibtex/authors/venue/year/doi）
         file_upload_id: Notion Files API でアップロードした PDF の ID
@@ -99,9 +103,10 @@ def create_db_entry(
     response = client.pages.create(
         parent={"database_id": database_id},
         properties=_build_db_properties(
-            title, status, scholar=scholar, file_upload_id=file_upload_id
+            title=title, purpose=purpose, classification=classification, status=status, scholar=scholar, file_upload_id=file_upload_id
         ),
     )
+
     return response["id"]
 
 
@@ -122,6 +127,8 @@ def create_page_body(client: Client, page_id: str, data: dict) -> None:
 
 def _build_db_properties(
     title: str,
+    purpose: str,
+    classification: str,
     status: str,
     scholar: dict | None = None,
     file_upload_id: str | None = None,
@@ -131,6 +138,8 @@ def _build_db_properties(
     Args:
         title: 論文タイトル
         status: 設定するステータス名
+        purpose: 研究目的
+        classification: 研究内容の分類
         scholar: scholar_data.json から取得した論文データ
         file_upload_id: Notion Files API でアップロードした PDF の ID
 
@@ -144,6 +153,8 @@ def _build_db_properties(
         "Title": {"title": [{"text": {"content": title}}]},
         "Status": {"status": {"name": status}},
         "Venue": {"rich_text": [{"text": {"content": venue}}]},
+        "Purpose": {"multi_select": [{"name": purpose}]},
+        "Classification": {"multi_select": [{"name": classification}]},
     }
 
     if year is not None:

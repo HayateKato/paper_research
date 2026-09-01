@@ -87,7 +87,7 @@ def process_title(
             print(f"警告: PDF のアップロードに失敗しました。{e}")
 
     return create_db_entry(
-        client, database_id, title, status="処理中", scholar=scholar, file_upload_id=file_upload_id
+        client, database_id, title=title, purpose="未定", classification="未定", status="処理中", scholar=scholar, file_upload_id=file_upload_id
     )
 
 
