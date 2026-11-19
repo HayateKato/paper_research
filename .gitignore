@@ -1,0 +1,11 @@
+tmp/
+.venv/
+__pycache__/
+.python-version
+.env
+results/
+output.txt
+scholar_data.json
+pdfs/
+summary/
+.DS_Store
